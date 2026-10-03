@@ -3,9 +3,13 @@
 
 <img src="build/icon.png" alt="Flux" width="128" height="128" />
 
-# Flux
+# 🦊 Flux
 
-**Szybka, lekka i prywatna przeglądarka internetowa**
+**Szybka, lekka i prywatna przeglądarka**
+
+🌐 [Strona projektu](https://kitsun3kage.github.io/Flux/) •
+📥 [Pobierz](https://github.com/kitsun3kage/Flux/releases) •
+📖 [Dokumentacja](https://kitsun3kage.github.io/Flux/)
 
 [![Build](https://github.com/kitsun3kage/flux/actions/workflows/deploy.yml/badge.svg)](https://github.com/kitsun3kage/flux/actions/workflows/deploy.yml)
 [![Version](https://img.shields.io/github/v/release/kitsun3kage/flux)](https://github.com/kitsun3kage/flux/releases)
