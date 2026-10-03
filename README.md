@@ -16,10 +16,6 @@
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey)](https://github.com/kitsun3kage/flux/releases)
 
-[Pobierz](https://github.com/kitsun3kage/flux/releases) •
-[Dokumentacja](https://kitsun3kage.github.io) •
-[Zgłoś błąd](https://github.com/kitsun3kage/flux/issues)
-
 </div>
 
 ---
