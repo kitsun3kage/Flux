@@ -1,0 +1,67 @@
+# Flux – blocklist
+# Jedna domena na linię. Komentarze zaczynają się od #.
+
+# Google tracking
+google-analytics.com
+googletagmanager.com
+googlesyndication.com
+googleadservices.com
+doubleclick.net
+google.com/ads
+adservice.google.com
+pagead2.googlesyndication.com
+
+# Facebook
+connect.facebook.net
+facebook.com/tr
+pixel.facebook.com
+
+# Inne duże trackery
+scorecardresearch.com
+quantserve.com
+comscore.com
+nielsen.com
+adnxs.com
+criteo.com
+criteo.net
+taboola.com
+outbrain.com
+pubmatic.com
+rubiconproject.com
+openx.net
+casalemedia.com
+adform.net
+smartadserver.com
+teads.tv
+sharethrough.com
+yieldmo.com
+bidswitch.net
+amazon-adsystem.com
+adsrvr.org
+tremorhub.com
+spotxchange.com
+spotx.tv
+
+# Analityka
+hotjar.com
+mixpanel.com
+segment.io
+segment.com
+amplitude.com
+fullstory.com
+mouseflow.com
+crazyegg.com
+heap.io
+heapanalytics.com
+kissmetrics.com
+matomo.cloud
+plausible.io
+
+# Reklamy
+advertising.com
+adtechus.com
+advertising.yahoo.com
+adroll.com
+ads.yahoo.com
+adzerk.net
+bing.com/bat

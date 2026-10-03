@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="pl" data-palette="neutral" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nowa karta</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html, :root, [data-palette="neutral"] {
+    --accent-bright: #8AB4F8; --accent-main: #669DF6; --accent-deep: #1A73E8; --accent-rgb: 138, 180, 248;
+    }
+    [data-palette="emerald"] { --accent-bright: #4ADE80; --accent-main: #16A34A; --accent-deep: #064E3B; --accent-rgb: 22, 163, 74; }
+    [data-palette="violet"]  { --accent-bright: #C084FC; --accent-main: #9333EA; --accent-deep: #4C1D95; --accent-rgb: 147, 51, 234; }
+    [data-palette="rose"]    { --accent-bright: #FB7185; --accent-main: #E11D48; --accent-deep: #881337; --accent-rgb: 225, 29, 72; }
+    [data-palette="amber"]   { --accent-bright: #FBBF24; --accent-main: #D97706; --accent-deep: #78350F; --accent-rgb: 217, 119, 6; }
+    [data-palette="cyan"]    { --accent-bright: #22D3EE; --accent-main: #0891B2; --accent-deep: #164E63; --accent-rgb: 8, 145, 178; }
+
+    :root, [data-theme="dark"] {
+      --bg: #0B0F1A; --bg-card: #1A2236; --bg-input: #1A2236;
+      --bg-input-focus: #232D45;
+      --text-main: #E8EEF9; --text-dim: #7A87A3; --text-faint: #4A5670;
+      --border: #1E2740;
+    }
+    [data-theme="light"] {
+      --bg: #F7F9FC; --bg-card: #FFFFFF; --bg-input: #FFFFFF;
+      --bg-input-focus: #FFFFFF;
+      --text-main: #0A0E1A; --text-dim: #5A6780; --text-faint: #8A94A8;
+      --border: #DDE4EE;
+    }
+
+    body {
+      font-family: -apple-system, 'SF Pro Text', 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg); color: var(--text-main);
+      min-height: 100vh; display: flex; flex-direction: column;
+      align-items: center; padding: 80px 20px 40px;
+      transition: background 0.25s ease, color 0.25s ease;
+      -webkit-font-smoothing: antialiased;
+      position: relative; overflow-x: hidden;
+    }
+
+    body::before {
+      content: ''; position: fixed; inset: 0;
+      background:
+        radial-gradient(circle at 20% 0%, rgba(var(--accent-rgb), 0.15), transparent 50%),
+        radial-gradient(circle at 80% 100%, rgba(var(--accent-rgb), 0.1), transparent 50%);
+      pointer-events: none; z-index: 0; transition: background 0.35s ease;
+    }
+
+    .content {
+      position: relative; z-index: 1;
+      width: 100%; max-width: 720px;
+      display: flex; flex-direction: column; align-items: center; gap: 40px;
+    }
+
+    .hero {
+      display: flex; flex-direction: column; align-items: center;
+      gap: 16px; margin-bottom: 8px;
+    }
+    .logo {
+      width: 96px; height: 96px; border-radius: 50%;
+      box-shadow: 0 12px 40px rgba(var(--accent-rgb), 0.4);
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+    .logo:hover {
+      transform: scale(1.05) rotate(-3deg);
+      box-shadow: 0 16px 50px rgba(var(--accent-rgb), 0.55);
+    }
+    .brand {
+      font-size: 32px; font-weight: 800; letter-spacing: -0.5px;
+      background: linear-gradient(135deg, var(--accent-bright), var(--accent-main));
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .tagline { font-size: 13px; color: var(--text-dim); margin-top: -8px; }
+
+    .search-wrapper { width: 100%; position: relative; }
+    .search-box {
+      width: 100%; display: flex; align-items: center; gap: 12px;
+      padding: 16px 22px; background: var(--bg-input);
+      border: 2px solid transparent; border-radius: 24px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+      transition: all 0.2s ease;
+    }
+    .search-box:focus-within {
+      background: var(--bg-input-focus);
+      border-color: var(--accent-main);
+      box-shadow: 0 0 0 4px rgba(var(--accent-rgb), 0.2), 0 8px 32px rgba(var(--accent-rgb), 0.25);
+      transform: translateY(-2px);
+    }
+    .search-icon { color: var(--text-dim); flex-shrink: 0; transition: color 0.15s ease; }
+    .search-box:focus-within .search-icon { color: var(--accent-bright); }
+    #search {
+      flex: 1; border: none; background: transparent;
+      color: var(--text-main); font-size: 16px; font-family: inherit;
+      outline: none; padding: 0;
+    }
+    #search::placeholder { color: var(--text-faint); }
+
+    .shortcuts-title {
+      font-size: 12px; font-weight: 600; text-transform: uppercase;
+      letter-spacing: 1px; color: var(--text-faint);
+      align-self: flex-start; margin-bottom: -20px;
+    }
+
+    .shortcuts {
+      width: 100%;
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+      gap: 12px;
+    }
+
+    .shortcut {
+      display: flex; flex-direction: column; align-items: center; gap: 8px;
+      padding: 16px 8px; background: var(--bg-card);
+      border: 1px solid transparent; border-radius: 14px;
+      cursor: pointer; transition: all 0.15s ease;
+      text-decoration: none; color: inherit;
+      position: relative; overflow: hidden;
+    }
+    .shortcut:hover {
+      transform: translateY(-3px);
+      border-color: rgba(var(--accent-rgb), 0.4);
+      box-shadow: 0 8px 24px rgba(var(--accent-rgb), 0.2);
+    }
+    .shortcut:hover .shortcut-remove { opacity: 1; }
+
+    .shortcut-icon {
+      width: 40px; height: 40px; border-radius: 10px;
+      background: rgba(var(--accent-rgb), 0.15);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px; font-weight: 700;
+      color: var(--accent-bright); overflow: hidden;
+    }
+    .shortcut-icon img { width: 100%; height: 100%; object-fit: cover; }
+
+    .shortcut-name {
+      font-size: 12px; font-weight: 500; color: var(--text-main);
+      text-align: center; white-space: nowrap;
+      overflow: hidden; text-overflow: ellipsis; max-width: 100%;
+    }
+
+    .shortcut-remove {
+      position: absolute; top: 6px; right: 6px;
+      width: 20px; height: 20px; border-radius: 50%;
+      background: rgba(255, 107, 122, 0.9); color: white;
+      border: none; cursor: pointer; font-size: 14px; line-height: 1;
+      display: flex; align-items: center; justify-content: center;
+      opacity: 0; transition: opacity 0.15s ease;
+    }
+    .shortcut-remove:hover { background: #FF6B7A; transform: scale(1.1); }
+
+    .shortcut-add {
+      display: flex; flex-direction: column; align-items: center; gap: 8px;
+      padding: 16px 8px; background: transparent;
+      border: 2px dashed var(--border); border-radius: 14px;
+      cursor: pointer; transition: all 0.15s ease;
+      color: var(--text-dim); font-family: inherit;
+    }
+    .shortcut-add:hover {
+      border-color: var(--accent-main);
+      color: var(--accent-bright);
+      background: rgba(var(--accent-rgb), 0.08);
+      transform: translateY(-3px);
+    }
+    .shortcut-add-icon {
+      width: 40px; height: 40px; border-radius: 10px;
+      background: rgba(127, 127, 127, 0.1);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 24px; line-height: 1;
+    }
+
+    .recent { width: 100%; display: flex; flex-direction: column; gap: 12px; }
+    .recent-list { display: flex; flex-direction: column; gap: 4px; }
+    .recent-item {
+      display: flex; align-items: center; gap: 12px;
+      padding: 10px 14px; border-radius: 10px;
+      cursor: pointer; transition: background 0.15s ease;
+      text-decoration: none; color: inherit;
+    }
+    .recent-item:hover { background: rgba(var(--accent-rgb), 0.12); }
+
+    .recent-favicon {
+      width: 20px; height: 20px; border-radius: 4px;
+      background: var(--bg-input);
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; overflow: hidden; font-size: 11px;
+    }
+    .recent-favicon img { width: 100%; height: 100%; object-fit: contain; }
+    .recent-content { flex: 1; min-width: 0; }
+    .recent-title {
+      font-size: 13px; color: var(--text-main);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .recent-url {
+      font-size: 11px; color: var(--text-dim);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      margin-top: 1px;
+    }
+
+    .modal-overlay {
+      position: fixed; inset: 0; background: rgba(0, 0, 0, 0.5);
+      backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+      display: none; align-items: center; justify-content: center;
+      z-index: 100; padding: 20px;
+    }
+    .modal-overlay.open { display: flex; }
+    .modal {
+      width: 100%; max-width: 420px;
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: 16px; padding: 24px;
+      box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5);
+    }
+    .modal-title { font-size: 18px; font-weight: 700; margin-bottom: 20px; }
+    .form-field { margin-bottom: 16px; }
+    .form-label {
+      display: block; font-size: 12px; font-weight: 600;
+      color: var(--text-dim); margin-bottom: 6px;
+      text-transform: uppercase; letter-spacing: 0.5px;
+    }
+    .form-input {
+      width: 100%; padding: 10px 14px;
+      background: var(--bg-input); border: 1px solid var(--border);
+      border-radius: 10px; color: var(--text-main);
+      font-size: 14px; font-family: inherit; outline: none;
+      transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+    .form-input:focus {
+      border-color: var(--accent-main);
+      box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.2);
+    }
+    .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
+
+    .btn {
+      padding: 10px 18px; border-radius: 10px;
+      border: 1px solid var(--border); background: transparent;
+      color: var(--text-main);
+      font-size: 13px; font-family: inherit; font-weight: 600;
+      cursor: pointer; transition: all 0.15s ease;
+    }
+    .btn:hover {
+      background: rgba(var(--accent-rgb), 0.1);
+      border-color: var(--accent-main);
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, var(--accent-main), var(--accent-deep));
+      border-color: transparent; color: #FFFFFF;
+      box-shadow: 0 4px 12px rgba(var(--accent-rgb), 0.35);
+    }
+    .btn-primary:hover {
+      background: linear-gradient(135deg, var(--accent-bright), var(--accent-main));
+      box-shadow: 0 6px 20px rgba(var(--accent-rgb), 0.5);
+      color: #FFFFFF;
+    }
+
+    .footer {
+      margin-top: 40px; font-size: 11px;
+      color: var(--text-faint); text-align: center;
+    }
+
+    ::-webkit-scrollbar { width: 8px; }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(var(--accent-rgb), 0.4); border-radius: 4px;
+    }
+
+    @keyframes fadeInUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .hero { animation: fadeInUp 0.5s ease backwards; }
+    .search-wrapper { animation: fadeInUp 0.5s 0.1s ease backwards; }
+    .shortcuts-title { animation: fadeInUp 0.5s 0.2s ease backwards; }
+    .shortcuts { animation: fadeInUp 0.5s 0.3s ease backwards; }
+    .recent { animation: fadeInUp 0.5s 0.4s ease backwards; }
+  </style>
+</head>
+<body>
+  <div class="content">
+    <div class="hero">
+      <img src="flux://logo.svg" alt="Flux" class="logo" id="logo" />
+      <div class="brand">Flux</div>
+      <div class="tagline">Szybka, lekka i prywatna przeglądarka</div>
+    </div>
+
+    <div class="search-wrapper">
+      <div class="search-box">
+        <span class="search-icon">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="7"/>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+        </span>
+        <input type="text" id="search" placeholder="Szukaj w internecie..." autofocus />
+      </div>
+    </div>
+
+    <div class="shortcuts-title">Skróty</div>
+    <div class="shortcuts" id="shortcuts"></div>
+
+    <div class="recent" id="recent-section" style="display:none">
+      <div class="shortcuts-title">Ostatnio odwiedzane</div>
+      <div class="recent-list" id="recent-list"></div>
+    </div>
+
+    <div class="footer">
+      Wersja 0.1.0 • <strong>Kitsun3 Kage</strong> • <a href="https://kitsun3kage.github.io" target="_blank" rel="noopener">kitsun3kage.github.io</a>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="modal">
+    <div class="modal">
+      <div class="modal-title">Dodaj skrót</div>
+      <div class="form-field">
+        <label class="form-label">Nazwa</label>
+        <input type="text" id="shortcut-name" class="form-input" placeholder="np. YouTube" />
+      </div>
+      <div class="form-field">
+        <label class="form-label">Adres URL</label>
+        <input type="text" id="shortcut-url" class="form-input" placeholder="np. youtube.com" />
+      </div>
+      <div class="modal-actions">
+        <button class="btn" id="modal-cancel">Anuluj</button>
+        <button class="btn btn-primary" id="modal-save">Dodaj</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const PALETTES = {
+      default: ['#4A9EFF', '#1E6FDC', '#0A2A6B'],
+      emerald: ['#6EE7B7', '#10B981', '#064E3B'],
+      violet:  ['#A78BFA', '#7C3AED', '#4C1D95'],
+      rose:    ['#F472B6', '#E11D48', '#881337'],
+      amber:   ['#FCD34D', '#F59E0B', '#78350F'],
+      cyan:    ['#67E8F9', '#06B6D4', '#164E63']
+    };
+
+    // ===== SETTINGS CACHE =====
+    let settingsCache = {};
+
+    async function loadAllSettings() {
+      if (window.flux?.settings) {
+        try {
+          settingsCache = await window.flux.settings.getAll();
+        } catch {}
+      }
+    }
+
+    function getSetting(key, fallback) {
+      return key in settingsCache ? settingsCache[key] : fallback;
+    }
+
+    async function setSetting(key, val) {
+      settingsCache[key] = val;
+      if (window.flux?.settings) {
+        await window.flux.settings.set(key, val);
+      }
+    }
+
+    // ===== MOTYW / PALETA =====
+    function applyTheme(theme) {
+      let resolved = theme;
+      if (theme === 'system') {
+        resolved = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+      }
+      document.documentElement.setAttribute('data-theme', resolved);
+    }
+
+    function applyPalette(paletteId) {
+      if (!paletteId) paletteId = 'default';
+      document.documentElement.setAttribute('data-palette', paletteId);
+      updateLogo(paletteId);
+    }
+
+    function updateLogo(paletteId) {
+      const [g1, g2, g3] = PALETTES[paletteId] || PALETTES.default;
+      const svg = `<svg width="256" height="256" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <clipPath id="c"><circle cx="128" cy="128" r="112" /></clipPath>
+        <linearGradient id="b" x1="0" y1="0" x2="256" y2="256" gradientUnits="userSpaceOnUse">
+          <stop stop-color="#1A2233"/><stop offset="1" stop-color="#0A0E1A"/>
+        </linearGradient>
+        <linearGradient id="br" x1="0" y1="40" x2="256" y2="256" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stop-color="${g1}"/>
+          <stop offset="50%" stop-color="${g2}"/>
+          <stop offset="100%" stop-color="${g3}"/>
+        </linearGradient>
+        <linearGradient id="gl" x1="128" y1="16" x2="128" y2="240" gradientUnits="userSpaceOnUse">
+          <stop stop-color="#E8EEF9" stop-opacity="0.3"/>
+          <stop offset="1" stop-color="#E8EEF9" stop-opacity="0.02"/>
+        </linearGradient>
+      </defs>
+      <circle cx="128" cy="134" r="112" fill="#000" fill-opacity="0.3" filter="blur(8px)" />
+      <circle cx="128" cy="128" r="112" fill="url(#b)" />
+      <g clip-path="url(#c)">
+        <path d="M-20,140 Q 60,70 140,150 T 300,120 L 300,260 L -20,260 Z" fill="url(#br)" opacity="0.6"/>
+        <path d="M-20,180 Q 80,100 160,190 T 300,150 L 300,260 L -20,260 Z" fill="url(#br)"/>
+        <path d="M-20,50 C 90,-30 160,160 280,40 L 280,-20 L -20,-20 Z" fill="url(#br)" opacity="0.15"/>
+        <path d="M104,80 L164,80 L164,104 L128,104 L128,124 L154,124 L154,148 L128,148 L128,185 Q116,180 104,175 Z" fill="#E8EEF9" opacity="0.95" />
+      </g>
+      <circle cx="128" cy="128" r="111" fill="none" stroke="url(#gl)" stroke-width="2"/>
+      </svg>`;
+      const blob = new Blob([svg], { type: 'image/svg+xml' });
+      document.getElementById('logo').src = URL.createObjectURL(blob);
+    }
+
+    function escapeHtml(str) {
+      const div = document.createElement('div');
+      div.textContent = str || '';
+      return div.innerHTML;
+    }
+
+    function getFavicon(pageUrl) {
+      try {
+        const u = new URL(pageUrl);
+        return `https://www.google.com/s2/favicons?domain=${u.hostname}&sz=64`;
+      } catch { return null; }
+    }
+
+    // ===== SKRÓTY =====
+    const DEFAULT_SHORTCUTS = [
+      { name: 'YouTube',   url: 'https://youtube.com',     icon: '▶️' },
+      { name: 'Wikipedia', url: 'https://wikipedia.org',   icon: '📚' },
+      { name: 'GitHub',    url: 'https://github.com',      icon: '🐙' },
+      { name: 'Reddit',    url: 'https://reddit.com',      icon: '👽' },
+      { name: 'Gmail',     url: 'https://mail.google.com', icon: '✉️' },
+      { name: 'Mapy',      url: 'https://maps.google.com', icon: '🗺️' }
+    ];
+
+    function loadShortcuts() {
+      try {
+        const saved = localStorage.getItem('flux-shortcuts');
+        if (saved) return JSON.parse(saved);
+      } catch {}
+      localStorage.setItem('flux-shortcuts', JSON.stringify(DEFAULT_SHORTCUTS));
+      return DEFAULT_SHORTCUTS;
+    }
+
+    function saveShortcuts(list) {
+      localStorage.setItem('flux-shortcuts', JSON.stringify(list));
+    }
+
+    function renderShortcuts() {
+      const shortcuts = loadShortcuts();
+      const container = document.getElementById('shortcuts');
+      container.innerHTML = '';
+
+      shortcuts.forEach((s, i) => {
+        const a = document.createElement('a');
+        a.className = 'shortcut';
+        a.href = '#';
+        const favicon = getFavicon(s.url);
+        a.innerHTML = `
+          <div class="shortcut-icon">
+            ${favicon ? `<img src="${favicon}" onerror="this.replaceWith('${s.icon || '🌐'}')"/>` : (s.icon || '🌐')}
+          </div>
+          <div class="shortcut-name">${escapeHtml(s.name)}</div>
+          <button class="shortcut-remove" data-index="${i}" title="Usuń">×</button>
+        `;
+        a.addEventListener('click', (e) => {
+          if (e.target.classList.contains('shortcut-remove')) return;
+          e.preventDefault();
+          window.location.href = s.url;
+        });
+        a.querySelector('.shortcut-remove').addEventListener('click', (e) => {
+          e.stopPropagation();
+          removeShortcut(i);
+        });
+        container.appendChild(a);
+      });
+
+      const addBtn = document.createElement('button');
+      addBtn.className = 'shortcut-add';
+      addBtn.innerHTML = `<div class="shortcut-add-icon">+</div><div class="shortcut-name">Dodaj</div>`;
+      addBtn.addEventListener('click', () => openModal());
+      container.appendChild(addBtn);
+    }
+
+    function removeShortcut(index) {
+      const shortcuts = loadShortcuts();
+      shortcuts.splice(index, 1);
+      saveShortcuts(shortcuts);
+      renderShortcuts();
+    }
+
+    // ===== MODAL =====
+    const modal = document.getElementById('modal');
+    const modalName = document.getElementById('shortcut-name');
+    const modalUrl = document.getElementById('shortcut-url');
+
+    function openModal() {
+      modalName.value = '';
+      modalUrl.value = '';
+      modal.classList.add('open');
+      setTimeout(() => modalName.focus(), 100);
+    }
+
+    function closeModal() { modal.classList.remove('open'); }
+
+    document.getElementById('modal-cancel').addEventListener('click', closeModal);
+    modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+
+    document.getElementById('modal-save').addEventListener('click', () => {
+      const name = modalName.value.trim();
+      let url = modalUrl.value.trim();
+      if (!name || !url) return;
+      if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
+
+      const shortcuts = loadShortcuts();
+      shortcuts.push({ name, url, icon: '🌐' });
+      saveShortcuts(shortcuts);
+      renderShortcuts();
+      closeModal();
+    });
+
+    [modalName, modalUrl].forEach(el => {
+      el.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') document.getElementById('modal-save').click();
+      });
+    });
+
+    // ===== WYSZUKIWARKA =====
+    const SEARCH_ENGINES = {
+      duckduckgo: 'https://duckduckgo.com/?q=',
+      google: 'https://www.google.com/search?q=',
+      bing: 'https://www.bing.com/search?q='
+    };
+
+    document.getElementById('search').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        const value = e.target.value.trim();
+        if (!value) return;
+
+        const engine = getSetting('searchEngine', 'duckduckgo');
+        let url;
+
+        if (/^https?:\/\//i.test(value)) url = value;
+        else if (/^flux:\/\//i.test(value)) url = value;
+        else if (/^[\w-]+\.[\w.-]+/.test(value) && !value.includes(' ')) url = 'https://' + value;
+        else url = (SEARCH_ENGINES[engine] || SEARCH_ENGINES.duckduckgo) + encodeURIComponent(value);
+
+        window.location.href = url;
+      }
+    });
+
+    // ===== OSTATNIO =====
+    function renderRecent() {
+      const history = JSON.parse(localStorage.getItem('flux-history') || '[]');
+      const recent = history.slice(-5).reverse();
+
+      if (recent.length === 0) {
+        document.getElementById('recent-section').style.display = 'none';
+        return;
+      }
+
+      document.getElementById('recent-section').style.display = 'flex';
+      const list = document.getElementById('recent-list');
+      list.innerHTML = '';
+
+      const seen = new Set();
+      const unique = [];
+      recent.forEach(item => {
+        try {
+          const host = new URL(item.url).hostname;
+          if (seen.has(host)) return;
+          seen.add(host);
+          unique.push(item);
+        } catch {}
+      });
+
+      unique.slice(0, 5).forEach(item => {
+        const a = document.createElement('a');
+        a.className = 'recent-item';
+        a.href = '#';
+        const favicon = getFavicon(item.url);
+        a.innerHTML = `
+          <span class="recent-favicon">
+            ${favicon ? `<img src="${favicon}" onerror="this.replaceWith('🌐')"/>` : '🌐'}
+          </span>
+          <div class="recent-content">
+            <div class="recent-title">${escapeHtml(item.title)}</div>
+            <div class="recent-url">${escapeHtml(item.url)}</div>
+          </div>
+        `;
+        a.addEventListener('click', (e) => {
+          e.preventDefault();
+          window.location.href = item.url;
+        });
+        list.appendChild(a);
+      });
+    }
+
+    // ===== NASŁUCH ZMIAN Z MAIN PROCESS =====
+    if (window.flux?.settings) {
+      window.flux.settings.onChange(({ key, value }) => {
+        settingsCache[key] = value;
+        if (key === 'theme') applyTheme(value);
+        if (key === 'palette') applyPalette(value);
+      });
+    }
+
+    window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => {
+      if (getSetting('theme', 'dark') === 'system') applyTheme('system');
+    });
+
+    // ===== START =====
+    (async () => {
+      await loadAllSettings();
+      applyTheme(getSetting('theme', 'dark'));
+      applyPalette(getSetting('palette', 'default'));
+      renderShortcuts();
+      renderRecent();
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,137 @@
+appId: com.kitsun3kage.flux
+productName: Flux
+copyright: Copyright © 2026 Kitsun3 Kage
+
+directories:
+  output: dist
+  buildResources: build
+
+files:
+  - "**/*"
+  - "!dist/**"
+  - "!**/.DS_Store"
+  - "!node_modules/**/{test,__tests__,tests,powered-test,example,examples}"
+  - "!*.md"
+  - "!*.map"
+  - "!*.log"
+
+asar: true
+
+# ==================================================
+# MACOS
+# ==================================================
+mac:
+  category: public.app-category.productivity
+  target:
+    - target: dmg
+      arch:
+        - universal
+    - target: zip
+      arch:
+        - universal
+  icon: build/icon.icns
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.inherit.plist
+  darkModeSupport: true
+  extendInfo:
+    NSHumanReadableCopyright: "Copyright © 2026 Kitsun3 Kage"
+
+dmg:
+  title: Flux
+  icon: build/icon.icns
+  contents:
+    - x: 140
+      y: 180
+      type: file
+    - x: 400
+      y: 180
+      type: link
+      path: /Applications
+
+# ==================================================
+# WINDOWS
+# ==================================================
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+    - target: portable
+      arch:
+        - x64
+  icon: build/icon.ico
+  publisherName: Kitsun3 Kage
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Flux
+  artifactName: "${productName}-${version}-Setup.${ext}"
+  uninstallDisplayName: "Flux"
+  installerIcon: build/icon.ico
+  uninstallerIcon: build/icon.ico
+  installerHeaderIcon: build/icon.ico
+
+portable:
+  artifactName: "${productName}-${version}-Portable.${ext}"
+
+# ==================================================
+# LINUX
+# ==================================================
+linux:
+  target:
+    - target: AppImage
+      arch:
+        - x64
+    - target: deb
+      arch:
+        - x64
+  icon: build/icon.png
+  category: Network
+  synopsis: "Szybka i lekka przeglądarka"
+  description: |
+    Flux to szybka, lekka i prywatna przeglądarka internetowa.
+    
+    Cechy:
+    - Wbudowany adblock i anti-tracking
+    - Ochrona prywatności (DNT/GPC, anti-fingerprinting)
+    - 7 palet kolorów
+    - Motyw jasny i ciemny
+    - Wewnętrzne strony flux://
+    - Tryb prywatny
+    - Menedżer zakładek, historii, haseł i pobierania
+  desktop:
+    Name: Flux
+    Comment: Szybka i lekka przeglądarka
+    Categories: Network;WebBrowser;
+    StartupWMClass: Flux
+
+appImage:
+  artifactName: "${productName}-${version}-${arch}.${ext}"
+
+deb:
+  artifactName: "${productName}-${version}-${arch}.${ext}"
+  depends:
+    - libgtk-3-0
+    - libnotify4
+    - libnss3
+    - libxss1
+    - libxtst6
+    - xdg-utils
+    - libatspi2.0-0
+    - libappindicator3-1
+    - libsecret-1-0
+
+# ==================================================
+# PUBLISH – GitHub Releases
+# ==================================================
+publish:
+  provider: github
+  owner: kitsun3kage
+  repo: flux
+  releaseType: release

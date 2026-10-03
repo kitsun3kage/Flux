@@ -1,0 +1,60 @@
+# ===== Node =====
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+yarn.lock
+.pnpm-debug.log*
+
+# ===== Build / dist =====
+dist/
+out/
+build/*.icns
+build/*.ico
+build/*.png
+build/*.svg
+!build/entitlements.mac.plist
+!build/entitlements.mac.inherit.plist
+!build/.gitkeep
+
+# ===== Electron =====
+.electron/
+.electron-builder-cache/
+*.asar
+
+# ===== System =====
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# ===== IDE =====
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ===== Logs =====
+*.log
+logs/
+npm-debug.log*
+.cache/
+
+# ===== Env =====
+.env
+.env.local
+.env.*.local
+
+# ===== Osoiste =====
+*.pem
+*.p12
+*.cer
+*.key
+*.mobileprovision

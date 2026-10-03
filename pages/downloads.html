@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="pl" data-palette="neutral" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pobrane – Flux</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html, :root, [data-palette="neutral"] {
+      --accent-bright: #8AB4F8; --accent-main: #669DF6; --accent-deep: #1A73E8; --accent-rgb: 138, 180, 248;
+    }
+    [data-palette="emerald"] { --accent-bright: #4ADE80; --accent-main: #16A34A; --accent-deep: #064E3B; --accent-rgb: 22, 163, 74; }
+    [data-palette="violet"]  { --accent-bright: #C084FC; --accent-main: #9333EA; --accent-deep: #4C1D95; --accent-rgb: 147, 51, 234; }
+    [data-palette="rose"]    { --accent-bright: #FB7185; --accent-main: #E11D48; --accent-deep: #881337; --accent-rgb: 225, 29, 72; }
+    [data-palette="amber"]   { --accent-bright: #FBBF24; --accent-main: #D97706; --accent-deep: #78350F; --accent-rgb: 217, 119, 6; }
+    [data-palette="cyan"]    { --accent-bright: #22D3EE; --accent-main: #0891B2; --accent-deep: #164E63; --accent-rgb: 8, 145, 178; }
+
+    :root, [data-theme="dark"] {
+      --bg: #0B0F1A; --bg-card: #1A2236; --bg-input: #1A2236;
+      --text-main: #E8EEF9; --text-dim: #7A87A3; --text-faint: #4A5670;
+      --border: #1E2740; --border-soft: #18203A;
+      --red: #FF6B7A; --green: #4ADE80; --orange: #FFA94D;
+    }
+    [data-theme="light"] {
+      --bg: #F7F9FC; --bg-card: #FFFFFF; --bg-input: #FFFFFF;
+      --text-main: #0A0E1A; --text-dim: #5A6780; --text-faint: #8A94A8;
+      --border: #DDE4EE; --border-soft: #E8EDF5;
+      --red: #D6334A; --green: #16A34A; --orange: #EA580C;
+    }
+
+    body {
+      font-family: -apple-system, 'SF Pro Text', 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg); color: var(--text-main);
+      min-height: 100vh; -webkit-font-smoothing: antialiased;
+      transition: background 0.25s ease, color 0.25s ease;
+    }
+
+    .container { max-width: 900px; margin: 0 auto; padding: 48px 32px; }
+
+    .header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 32px; gap: 16px; flex-wrap: wrap;
+    }
+
+    .title {
+      font-size: 32px; font-weight: 800; letter-spacing: -0.5px;
+      background: linear-gradient(135deg, var(--accent-bright), var(--accent-main));
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .btn {
+      padding: 10px 18px; border-radius: 10px;
+      border: 1px solid var(--border); background: var(--bg-input);
+      color: var(--text-main);
+      font-size: 13px; font-family: inherit; font-weight: 600;
+      cursor: pointer; transition: all 0.15s ease;
+    }
+    .btn:hover {
+      background: rgba(var(--accent-rgb), 0.12);
+      border-color: var(--accent-main);
+      color: var(--accent-bright);
+    }
+    .btn-danger { color: var(--red); border-color: rgba(255, 107, 122, 0.3); }
+    .btn-danger:hover { background: rgba(255, 107, 122, 0.15); border-color: var(--red); color: var(--red); }
+
+    .item {
+      display: flex; align-items: center; gap: 14px;
+      padding: 16px 20px; background: var(--bg-card);
+      border: 1px solid var(--border); border-radius: 14px;
+      margin-bottom: 10px; transition: all 0.15s ease;
+    }
+    .item:hover {
+      border-color: rgba(var(--accent-rgb), 0.3);
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(var(--accent-rgb), 0.12);
+    }
+
+    .item-icon {
+      width: 42px; height: 42px; border-radius: 10px;
+      background: rgba(var(--accent-rgb), 0.15);
+      color: var(--accent-bright);
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .item-content { flex: 1; min-width: 0; }
+    .item-name {
+      font-size: 14px; font-weight: 600;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      margin-bottom: 2px;
+    }
+    .item-meta {
+      font-size: 12px; color: var(--text-dim);
+      display: flex; align-items: center; gap: 8px;
+    }
+    .item-url {
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      max-width: 400px;
+    }
+
+    .item-status {
+      font-size: 11px; font-weight: 600;
+      padding: 3px 10px; border-radius: 6px;
+      text-transform: uppercase; letter-spacing: 0.5px;
+      flex-shrink: 0;
+    }
+    .status-done { background: rgba(74, 222, 128, 0.15); color: var(--green); }
+    .status-progressing { background: rgba(255, 169, 77, 0.15); color: var(--orange); }
+    .status-cancelled { background: rgba(255, 107, 122, 0.15); color: var(--red); }
+    .status-interrupted { background: rgba(255, 107, 122, 0.15); color: var(--red); }
+
+    .progress {
+      width: 100%; height: 4px; background: var(--bg-input);
+      border-radius: 2px; overflow: hidden; margin-top: 8px;
+    }
+    .progress-bar {
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent-bright), var(--accent-main));
+      border-radius: 2px; transition: width 0.3s ease;
+    }
+
+    .item-size {
+      font-size: 11.5px; color: var(--text-faint);
+      font-variant-numeric: tabular-nums; flex-shrink: 0;
+    }
+
+    .empty {
+      text-align: center; padding: 80px 20px; color: var(--text-dim);
+    }
+    .empty-icon { font-size: 64px; margin-bottom: 16px; opacity: 0.4; }
+    .empty-title { font-size: 18px; font-weight: 600; color: var(--text-main); margin-bottom: 6px; }
+    .empty-desc { font-size: 13px; }
+
+    ::-webkit-scrollbar { width: 10px; }
+    ::-webkit-scrollbar-thumb {
+      background: linear-gradient(180deg, rgba(var(--accent-rgb), 0.5), var(--accent-main));
+      border-radius: 5px; border: 2px solid transparent; background-clip: content-box;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1 class="title">Pobrane</h1>
+      <div>
+        <button class="btn btn-danger" id="clear-downloads">Wyczyść listę</button>
+      </div>
+    </div>
+
+    <div id="downloads-list"></div>
+  </div>
+
+  <script>
+    let settingsCache = {};
+
+    async function loadAllSettings() {
+      if (window.flux?.settings) {
+        try { settingsCache = await window.flux.settings.getAll(); } catch {}
+      }
+    }
+
+    function getSetting(key, fallback) {
+      return key in settingsCache ? settingsCache[key] : fallback;
+    }
+
+    function applyTheme(theme) {
+      let resolved = theme;
+      if (theme === 'system') {
+        resolved = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+      }
+      document.documentElement.setAttribute('data-theme', resolved);
+    }
+
+    function applyPalette(paletteId) {
+      if (!paletteId) paletteId = 'default';
+      document.documentElement.setAttribute('data-palette', paletteId);
+    }
+
+    function escapeHtml(str) {
+      const div = document.createElement('div');
+      div.textContent = str || '';
+      return div.innerHTML;
+    }
+
+    function formatBytes(bytes) {
+      if (!bytes || bytes === 0) return '0 B';
+      const k = 1024;
+      const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return (bytes / Math.pow(k, i)).toFixed(i === 0 ? 0 : 1) + ' ' + sizes[i];
+    }
+
+    let downloads = [];
+
+    async function loadDownloads() {
+      if (window.flux?.downloads) {
+        try { downloads = await window.flux.downloads.list(); }
+        catch { downloads = []; }
+      }
+      render();
+    }
+
+    function render() {
+      const list = document.getElementById('downloads-list');
+
+      if (downloads.length === 0) {
+        list.innerHTML = `
+          <div class="empty">
+            <div class="empty-icon">📥</div>
+            <div class="empty-title">Brak pobranych plików</div>
+            <div class="empty-desc">Pliki pobrane przez Flux pojawią się tutaj</div>
+          </div>
+        `;
+        return;
+      }
+
+      list.innerHTML = '';
+      downloads.slice().reverse().forEach(item => {
+        const el = document.createElement('div');
+        el.className = 'item';
+
+        const isProgressing = item.state === 'progressing';
+        const percent = item.totalBytes > 0
+          ? Math.round((item.receivedBytes / item.totalBytes) * 100)
+          : 0;
+
+        const statusLabel = {
+          'progressing': 'Pobieranie',
+          'completed': 'Gotowe',
+          'cancelled': 'Anulowane',
+          'interrupted': 'Przerwane'
+        }[item.state] || item.state;
+
+        const statusClass = {
+          'progressing': 'status-progressing',
+          'completed': 'status-done',
+          'cancelled': 'status-cancelled',
+          'interrupted': 'status-interrupted'
+        }[item.state] || '';
+
+        el.innerHTML = `
+          <div class="item-icon">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="7 10 12 15 17 10"/>
+              <line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+          </div>
+          <div class="item-content">
+            <div class="item-name">${escapeHtml(item.filename)}</div>
+            <div class="item-meta">
+              <span class="item-url">${escapeHtml(item.url)}</span>
+            </div>
+            ${isProgressing ? `
+              <div class="progress">
+                <div class="progress-bar" style="width: ${percent}%"></div>
+              </div>
+            ` : ''}
+          </div>
+          <div class="item-size">
+            ${item.totalBytes > 0 ? formatBytes(item.receivedBytes) + ' / ' + formatBytes(item.totalBytes) : formatBytes(item.receivedBytes)}
+          </div>
+          <span class="item-status ${statusClass}">${statusLabel}</span>
+        `;
+
+        list.appendChild(el);
+      });
+    }
+
+    document.getElementById('clear-downloads')?.addEventListener('click', () => {
+      if (!confirm('Wyczyścić listę pobranych plików?')) return;
+      downloads = [];
+      render();
+    });
+
+    if (window.flux?.downloads) {
+      window.flux.downloads.onUpdate(() => loadDownloads());
+    }
+
+    if (window.flux?.settings) {
+      window.flux.settings.onChange(({ key, value }) => {
+        settingsCache[key] = value;
+        if (key === 'theme') applyTheme(value);
+        if (key === 'palette') applyPalette(value);
+      });
+    }
+
+    window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => {
+      if (getSetting('theme', 'dark') === 'system') applyTheme('system');
+    });
+
+    (async () => {
+      await loadAllSettings();
+      applyTheme(getSetting('theme', 'dark'));
+      applyPalette(getSetting('palette', 'default'));
+      loadDownloads();
+    })();
+  </script>
+</body>
+</html>
