@@ -53,6 +53,7 @@ dmg:
 # ==================================================
 # WINDOWS
 # ==================================================
+# ⬇️ USUNIĘTE: win.publisherName (nie istnieje w 26.x)
 win:
   target:
     - target: nsis
@@ -62,7 +63,6 @@ win:
       arch:
         - x64
   icon: build/icon.ico
-  publisherName: Kitsun3 Kage
 
 nsis:
   oneClick: false
@@ -105,7 +105,7 @@ linux:
     - Wewnętrzne strony flux://
     - Tryb prywatny
     - Menedżer zakładek, historii, haseł i pobierania
-  maintainer: Kitsun3 Kage <kitsun3kage@example.com>
+  maintainer: Kitsun3 Kage
   vendor: Kitsun3 Kage
 
 appImage:
