@@ -96,7 +96,7 @@ linux:
   synopsis: "Szybka i lekka przeglądarka"
   description: |
     Flux to szybka, lekka i prywatna przeglądarka internetowa.
-    
+
     Cechy:
     - Wbudowany adblock i anti-tracking
     - Ochrona prywatności (DNT/GPC, anti-fingerprinting)
@@ -105,11 +105,8 @@ linux:
     - Wewnętrzne strony flux://
     - Tryb prywatny
     - Menedżer zakładek, historii, haseł i pobierania
-  desktop:
-    Name: Flux
-    Comment: Szybka i lekka przeglądarka
-    Categories: Network;WebBrowser;
-    StartupWMClass: Flux
+  maintainer: Kitsun3 Kage <kitsun3kage@example.com>
+  vendor: Kitsun3 Kage
 
 appImage:
   artifactName: "${productName}-${version}-${arch}.${ext}"
@@ -124,14 +121,13 @@ deb:
     - libxtst6
     - xdg-utils
     - libatspi2.0-0
-    - libappindicator3-1
     - libsecret-1-0
 
 # ==================================================
-# PUBLISH – GitHub Releases
+# PUBLISH
 # ==================================================
 publish:
   provider: github
   owner: kitsun3kage
-  repo: flux
+  repo: Flux
   releaseType: release
