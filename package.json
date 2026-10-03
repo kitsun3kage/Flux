@@ -1,7 +1,7 @@
 {
   "name": "flux",
   "productName": "Flux",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Flux – szybka i lekka przeglądarka",
   "author": "Kitsun3 Kage",
   "main": "main.js",
@@ -10,10 +10,24 @@
     "dev": "electron . --enable-logging",
     "build": "electron-builder --mac",
     "build:win": "electron-builder --win",
-    "build:linux": "electron-builder --linux"
+    "build:linux": "electron-builder --linux",
+    "build:all": "electron-builder --mac --win --linux"
+  },
+  "protocols": [
+    {
+      "name": "Web Browser",
+      "schemes": ["http", "https"]
+    },
+    {
+      "name": "Flux Protocol",
+      "schemes": ["flux"]
+    }
+  ],
+  "dependencies": {
+    "electron-updater": "^6.3.9"
   },
   "devDependencies": {
     "electron": "^32.3.3",
-    "electron-builder": "^25.1.8"
+    "electron-builder": "^26.15.3"
   }
 }

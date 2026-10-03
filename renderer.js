@@ -1,5 +1,5 @@
 // ==================================================
-// FLUX – renderer.js
+// FLUX – renderer.js v0.1.1 (auto-update + default browser)
 // ==================================================
 
 let tabs = [];
@@ -54,7 +54,8 @@ let settingsCache = {
   saveHistory: true,
   blockTrackers: true,
   blockFingerprint: true,
-  dnt: true
+  dnt: true,
+  autoUpdate: true
 };
 
 async function initSettings() {
@@ -133,7 +134,7 @@ function addToHistory(url, title) {
   saveHistory(history);
 }
 
-// ===== Zakładki =====
+// ===== Zakładki (bookmarks) =====
 function loadBookmarks() {
   try { return JSON.parse(localStorage.getItem('flux-bookmarks') || '[]'); }
   catch { return []; }
@@ -176,7 +177,6 @@ function updateBookmarkStar() {
 // MOTYW
 // ==================================================
 function applyTheme(theme) {
-  // ⬇️ Tryb prywatny ZAWSZE ciemny
   if (isPrivate) {
     document.documentElement.setAttribute('data-theme', 'dark');
     if (window.flux && window.flux.theme) window.flux.theme.set('dark');
@@ -251,7 +251,6 @@ function setupSyncListeners() {
       console.log('[Flux] Zmiana ustawienia:', key, '=', value);
       settingsCache[key] = value;
 
-      // W trybie prywatnym ignoruj zmianę motywu
       if (key === 'theme') {
         if (!isPrivate) applyTheme(value);
         return;
@@ -268,19 +267,217 @@ function setupSyncListeners() {
 }
 
 // ==================================================
-// NORMALIZACJA URL – z blokadami
+// OPEN URL Z SYSTEMU
+// ==================================================
+function setupOpenUrlListener() {
+  if (!window.flux?.app?.onOpenUrl) return;
+
+  window.flux.app.onOpenUrl((url) => {
+    console.log('[Flux] Otwieram URL z systemu:', url);
+
+    const tab = tabs.find(t => t.id === activeTabId);
+    if (tab) {
+      tab.webview.loadURL(url);
+    } else {
+      createTab(url);
+    }
+  });
+}
+
+// ==================================================
+// AUTO-UPDATE UI
+// ==================================================
+function setupUpdateListeners() {
+  if (!window.flux?.update) return;
+
+  window.flux.update.onChecking(() => {
+    console.log('[Flux] Sprawdzam aktualizacje...');
+  });
+
+  window.flux.update.onAvailable((info) => {
+    console.log('[Flux] Dostępna aktualizacja:', info.version);
+    showUpdateBanner(info);
+  });
+
+  window.flux.update.onNotAvailable((info) => {
+    console.log('[Flux] Brak aktualizacji');
+  });
+
+  window.flux.update.onProgress((progress) => {
+    updateDownloadProgress(progress);
+  });
+
+  window.flux.update.onDownloaded((info) => {
+    showInstallPrompt(info);
+  });
+
+  window.flux.update.onError((err) => {
+    console.error('[Flux] Błąd aktualizacji:', err);
+  });
+}
+
+function showUpdateBanner(info) {
+  const existing = document.getElementById('update-banner');
+  if (existing) existing.remove();
+
+  const banner = document.createElement('div');
+  banner.id = 'update-banner';
+  banner.innerHTML = `
+    <div class="update-content">
+      <div class="update-icon">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 12a9 9 0 1 1-2.64-6.36"/>
+          <polyline points="21 3 21 9 15 9"/>
+        </svg>
+      </div>
+      <div class="update-text">
+        <strong>Dostępna aktualizacja Flux ${info.version}</strong>
+        <span>Nowa wersja jest gotowa do pobrania</span>
+      </div>
+      <button id="update-download-btn" class="update-btn">Pobierz</button>
+      <button id="update-dismiss-btn" class="update-close">×</button>
+    </div>
+  `;
+
+  banner.style.cssText = `
+    position: fixed;
+    top: 50px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: linear-gradient(135deg, #A78BFA, #7C3AED);
+    color: white;
+    padding: 12px 16px;
+    border-radius: 12px;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.4);
+    z-index: 10000;
+    min-width: 480px;
+    max-width: 90vw;
+    font-family: -apple-system, system-ui, sans-serif;
+    animation: updateSlideIn 0.3s ease;
+  `;
+
+  document.body.appendChild(banner);
+
+  if (!document.getElementById('update-styles')) {
+    const style = document.createElement('style');
+    style.id = 'update-styles';
+    style.textContent = `
+      @keyframes updateSlideIn {
+        from { opacity: 0; transform: translateX(-50%) translateY(-20px); }
+        to { opacity: 1; transform: translateX(-50%) translateY(0); }
+      }
+      #update-banner .update-content { display: flex; align-items: center; gap: 12px; }
+      #update-banner .update-icon {
+        display: flex; align-items: center; justify-content: center;
+        width: 32px; height: 32px;
+        background: rgba(255,255,255,0.2);
+        border-radius: 50%; flex-shrink: 0;
+      }
+      #update-banner .update-text { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+      #update-banner .update-text strong { font-size: 13.5px; font-weight: 700; }
+      #update-banner .update-text span { font-size: 11.5px; opacity: 0.9; }
+      #update-banner .update-btn {
+        padding: 8px 16px; background: white; color: #7C3AED;
+        border: none; border-radius: 8px;
+        font-size: 12.5px; font-weight: 700; cursor: pointer;
+        font-family: inherit; transition: transform 0.15s ease;
+      }
+      #update-banner .update-btn:hover { transform: scale(1.05); }
+      #update-banner .update-close {
+        background: rgba(255,255,255,0.15); border: none; color: white;
+        width: 28px; height: 28px; border-radius: 50%;
+        cursor: pointer; font-size: 18px; line-height: 1;
+        display: flex; align-items: center; justify-content: center;
+      }
+      #update-banner .update-close:hover { background: rgba(255,255,255,0.25); }
+    `;
+    document.head.appendChild(style);
+  }
+
+  document.getElementById('update-download-btn').addEventListener('click', async () => {
+    const btn = document.getElementById('update-download-btn');
+    btn.textContent = 'Pobieram...';
+    btn.disabled = true;
+    btn.style.opacity = '0.7';
+
+    if (window.flux?.update) {
+      await window.flux.update.download();
+    }
+  });
+
+  document.getElementById('update-dismiss-btn').addEventListener('click', () => {
+    banner.remove();
+  });
+}
+
+function updateDownloadProgress(progress) {
+  const banner = document.getElementById('update-banner');
+  if (!banner) return;
+
+  const btn = document.getElementById('update-download-btn');
+  if (btn) {
+    const percent = Math.round(progress.percent);
+    btn.textContent = `${percent}%`;
+
+    let bar = banner.querySelector('.update-progress-bar');
+    if (!bar) {
+      bar = document.createElement('div');
+      bar.className = 'update-progress-bar';
+      bar.style.cssText = `
+        position: absolute; bottom: 0; left: 0; height: 3px;
+        background: rgba(255,255,255,0.8);
+        border-radius: 0 0 12px 12px;
+        transition: width 0.3s ease;
+      `;
+      banner.style.position = 'fixed';
+      banner.style.overflow = 'hidden';
+      banner.appendChild(bar);
+    }
+    bar.style.width = `${progress.percent}%`;
+  }
+}
+
+function showInstallPrompt(info) {
+  const banner = document.getElementById('update-banner');
+  if (!banner) return;
+
+  banner.innerHTML = `
+    <div class="update-content">
+      <div class="update-icon">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="20 6 9 17 4 12"/>
+        </svg>
+      </div>
+      <div class="update-text">
+        <strong>Aktualizacja ${info.version} gotowa</strong>
+        <span>Zrestartuj Flux aby zainstalować</span>
+      </div>
+      <button id="update-install-btn" class="update-btn">Zainstaluj</button>
+      <button id="update-later-btn" class="update-close" title="Później">×</button>
+    </div>
+  `;
+
+  document.getElementById('update-install-btn').addEventListener('click', () => {
+    if (window.flux?.update) window.flux.update.install();
+  });
+
+  document.getElementById('update-later-btn').addEventListener('click', () => {
+    banner.remove();
+  });
+}
+
+// ==================================================
+// NORMALIZACJA URL
 // ==================================================
 function normalizeUrl(input) {
   const value = input.trim();
   const homeUrl = getSetting('homeUrl') || 'flux://home';
   if (!value) return homeUrl;
 
-  // ⬇️ Blokada flux://privacy w ZWYKŁYM oknie
   if (/^flux:\/\/privacy\/?$/i.test(value) && !isPrivate) {
     return 'flux://private-blocked?page=privacy';
   }
 
-  // ⬇️ Blokada flux://settings i flux://history w PRYWATNYM oknie
   if (isPrivate) {
     if (/^flux:\/\/settings\/?$/i.test(value)) {
       return 'flux://private-blocked?page=settings';
@@ -293,6 +490,7 @@ function normalizeUrl(input) {
   if (/^flux:\/\//i.test(value)) return value;
   if (/^https?:\/\//i.test(value)) return value;
   if (/^[\w-]+\.[\w.-]+/.test(value) && !value.includes(' ')) return 'https://' + value;
+
   const engine = getSetting('searchEngine') || 'duckduckgo';
   return (SEARCH_ENGINES[engine] || SEARCH_ENGINES.duckduckgo) + encodeURIComponent(value);
 }
@@ -386,19 +584,14 @@ function createTab(url) {
   const tab = { id, webview, tabEl, title: 'Nowa karta', url: startUrl };
   tabs.push(tab);
 
-  // ==================================================
-  // ZDARZENIA WEBVIEW
-  // ==================================================
   webview.addEventListener('did-navigate', (e) => {
     const url = e.url;
 
-    // ⬇️ Blokada flux://privacy w ZWYKŁYM oknie
     if (!isPrivate && /^flux:\/\/privacy\/?$/i.test(url)) {
       webview.loadURL('flux://private-blocked?page=privacy');
       return;
     }
 
-    // ⬇️ Blokada flux://settings i flux://history w PRYWATNYM oknie
     if (isPrivate) {
       if (/^flux:\/\/settings\/?$/i.test(url)) {
         webview.loadURL('flux://private-blocked?page=settings');
@@ -450,7 +643,6 @@ function createTab(url) {
     if (activeTabId === id) updateZoomDisplay();
   });
 
-  // ⬇️ Otwieranie linków zewnętrznych w przeglądarce systemowej
   webview.addEventListener('new-window', (e) => {
     e.preventDefault();
     if (e.url && (e.url.startsWith('http://') || e.url.startsWith('https://'))) {
@@ -605,7 +797,6 @@ function showAutocomplete(query) {
     { url: 'flux://about',     title: 'O Flux',               type: 'Flux' }
   ];
 
-  // ⬇️ Dodaj strony w zależności od trybu
   if (isPrivate) {
     FLUX_PAGES.push({ url: 'flux://privacy', title: 'Tryb prywatny Flux', type: 'Flux' });
   } else {
@@ -946,7 +1137,6 @@ function handleMenuAction(action) {
     case 'new-private':  if (window.flux?.window) window.flux.window.newPrivate(); break;
     case 'focus-url':    urlInput.focus(); urlInput.select(); break;
 
-    // ⬇️ W trybie prywatnym blokuj settings i history
     case 'history':
       go(isPrivate ? 'flux://private-blocked?page=history' : 'flux://history');
       break;
@@ -1023,7 +1213,7 @@ async function renderPasswords() {
 // ===== Sync =====
 document.getElementById('export-data')?.addEventListener('click', async () => {
   const data = {
-    version: '0.1.0',
+    version: '0.1.1',
     exportedAt: new Date().toISOString(),
     settings: settingsCache,
     bookmarks: loadBookmarks(),
@@ -1095,8 +1285,11 @@ document.addEventListener('keydown', (e) => {
 // START
 // ==================================================
 (async () => {
-  console.log('[Flux] Startuję renderer...');
+  console.log('[Flux] Startuję renderer v0.1.1...');
   console.log('[Flux] Tryb prywatny:', isPrivate);
+
+  setupOpenUrlListener();
+  setupUpdateListeners();
 
   await initSettings();
   console.log('[Flux] Ustawienia po initSettings:', settingsCache);

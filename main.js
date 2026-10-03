@@ -1,17 +1,32 @@
 // ==================================================
-// FLUX – main.js
+// FLUX – main.js v0.1.1 (auto-update + default browser)
 // ==================================================
-const { app, BrowserWindow, ipcMain, nativeTheme, shell, session, dialog, protocol } = require('electron');
+const { app, BrowserWindow, ipcMain, nativeTheme, shell, session, dialog, protocol, systemPreferences } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const { execSync } = require('child_process');
+const { autoUpdater } = require('electron-updater');
 
 process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true';
+
+app.setName('Flux');
+
+// ==================================================
+// SINGLE INSTANCE LOCK
+// ==================================================
+const gotTheLock = app.requestSingleInstanceLock();
+
+if (!gotTheLock) {
+  app.quit();
+  process.exit(0);
+}
+
+let pendingUrl = null;
+let updateCheckInterval = null;
 
 // ==================================================
 // SETTINGS STORE
 // ==================================================
-app.setName('Flux');
-
 let mainWindow;
 const windows = new Set();
 
@@ -25,7 +40,9 @@ const DEFAULT_SETTINGS = {
   saveHistory: true,
   blockTrackers: true,
   blockFingerprint: true,
-  dnt: true
+  dnt: true,
+  autoUpdate: true,
+  defaultBrowserPromptShown: false
 };
 
 function getSettingsFilePath() {
@@ -193,9 +210,7 @@ function registerFluxProtocol() {
       hostname = u.hostname || 'home';
       pathname = u.pathname || '';
       searchParams = u.search || '';
-      console.log('[Flux] Protokół flux://', { hostname, pathname, searchParams });
     } catch (e) {
-      console.error('[Flux] Błąd parsowania URL:', request.url, e);
       const raw = request.url.replace('flux://', '');
       const parts = raw.split('/');
       hostname = parts[0] || 'home';
@@ -204,7 +219,6 @@ function registerFluxProtocol() {
 
     if (!hostname) hostname = 'home';
 
-    // 1) Pliki statyczne w katalogu głównym
     const staticFile = path.join(__dirname, hostname + pathname);
     if (fs.existsSync(staticFile) && fs.statSync(staticFile).isFile()) {
       const ext = path.extname(staticFile).toLowerCase();
@@ -233,16 +247,14 @@ function registerFluxProtocol() {
           return new Response(content, { status: 200, headers: { 'content-type': mime } });
         }
       } catch (err) {
-        console.error('[Flux] Błąd czytania pliku statycznego:', staticFile, err);
+        console.error('[Flux] Błąd czytania pliku:', staticFile, err);
       }
     }
 
-    // 2) Strony wewnętrzne
     const filePath = path.join(__dirname, 'pages', `${hostname}.html`);
     if (fs.existsSync(filePath)) {
       try {
         let html = fs.readFileSync(filePath, 'utf-8');
-
         if (searchParams) {
           const metaTag = `<meta name="flux-params" content="${searchParams.replace(/"/g, '&quot;')}">`;
           if (/<head[^>]*>/i.test(html)) {
@@ -251,7 +263,6 @@ function registerFluxProtocol() {
             html = metaTag + html;
           }
         }
-
         return new Response(html, {
           status: 200,
           headers: { 'content-type': 'text/html; charset=utf-8' }
@@ -261,15 +272,105 @@ function registerFluxProtocol() {
       }
     }
 
-    // 3) 404
     return new Response(
       `<html><body style="font-family:system-ui;background:#1F1F1F;color:#E8EAED;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;flex-direction:column;gap:16px">
         <h1 style="font-size:48px;margin:0">404</h1>
         <p style="color:#9AA0A6;margin:0">Nie znaleziono: <code style="color:#8AB4F8">flux://${hostname}${pathname}</code></p>
-        <p style="color:#5F6368;margin:0;font-size:12px">Dostępne: flux://home, flux://settings, flux://history, flux://downloads, flux://about, flux://privacy</p>
       </body></html>`,
       { status: 404, headers: { 'content-type': 'text/html; charset=utf-8' } }
     );
+  });
+}
+
+// ==================================================
+// AUTO-UPDATE
+// ==================================================
+function setupAutoUpdater() {
+  // Logger
+  autoUpdater.logger = {
+    info: (msg) => console.log('[AutoUpdate]', msg),
+    warn: (msg) => console.warn('[AutoUpdate]', msg),
+    error: (msg) => console.error('[AutoUpdate]', msg),
+    debug: (msg) => console.log('[AutoUpdate]', msg)
+  };
+
+  autoUpdater.autoDownload = false;
+  autoUpdater.autoInstallOnAppQuit = true;
+
+  // Nie sprawdzaj w dev
+  if (!app.isPackaged) {
+    console.log('[AutoUpdate] Pomijam – tryb dev');
+    return;
+  }
+
+  autoUpdater.on('checking-for-update', () => {
+    console.log('[AutoUpdate] Sprawdzam aktualizacje...');
+    broadcastToWindows('update:checking');
+  });
+
+  autoUpdater.on('update-available', (info) => {
+    console.log('[AutoUpdate] Dostępna aktualizacja:', info.version);
+    broadcastToWindows('update:available', {
+      version: info.version,
+      releaseDate: info.releaseDate,
+      releaseNotes: info.releaseNotes
+    });
+  });
+
+  autoUpdater.on('update-not-available', (info) => {
+    console.log('[AutoUpdate] Brak aktualizacji. Wersja:', info.version);
+    broadcastToWindows('update:not-available', {
+      version: info.version
+    });
+  });
+
+  autoUpdater.on('download-progress', (progress) => {
+    console.log(`[AutoUpdate] Pobieranie: ${Math.round(progress.percent)}%`);
+    broadcastToWindows('update:progress', {
+      percent: progress.percent,
+      bytesPerSecond: progress.bytesPerSecond,
+      transferred: progress.transferred,
+      total: progress.total
+    });
+  });
+
+  autoUpdater.on('update-downloaded', (info) => {
+    console.log('[AutoUpdate] Pobrano aktualizację:', info.version);
+    broadcastToWindows('update:downloaded', {
+      version: info.version,
+      releaseNotes: info.releaseNotes
+    });
+  });
+
+  autoUpdater.on('error', (err) => {
+    console.error('[AutoUpdate] Błąd:', err);
+    broadcastToWindows('update:error', {
+      message: err.message
+    });
+  });
+
+  // Sprawdź po 15 sekundach od startu
+  setTimeout(() => {
+    if (getAppSetting('autoUpdate', true)) {
+      autoUpdater.checkForUpdates().catch(err => {
+        console.error('[AutoUpdate] Błąd sprawdzania:', err);
+      });
+    }
+  }, 15000);
+
+  // Sprawdzaj co 6 godzin
+  updateCheckInterval = setInterval(() => {
+    if (getAppSetting('autoUpdate', true)) {
+      autoUpdater.checkForUpdates().catch(() => {});
+    }
+  }, 6 * 60 * 60 * 1000);
+}
+
+function broadcastToWindows(channel, data) {
+  BrowserWindow.getAllWindows().forEach(w => {
+    if (!w.isDestroyed()) {
+      w.webContents.send(channel, data || {});
+    }
   });
 }
 
@@ -307,7 +408,6 @@ function createWindow(options = {}) {
 
   const win = new BrowserWindow(winOptions);
 
-  // ⬇️ Otwieranie linków zewnętrznych z OKNA w domyślnej przeglądarce
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith('http://') || url.startsWith('https://')) {
       shell.openExternal(url);
@@ -321,27 +421,30 @@ function createWindow(options = {}) {
   windows.add(win);
   win.on('closed', () => windows.delete(win));
 
+  win.webContents.once('did-finish-load', () => {
+    if (pendingUrl) {
+      console.log('[Flux main] Otwieram pending URL:', pendingUrl);
+      win.webContents.send('open-url', pendingUrl);
+      pendingUrl = null;
+    }
+  });
+
   return win;
 }
 
 // ==================================================
-// PRELOAD dla webview + obsługa linków zewnętrznych
+// PRELOAD dla webview
 // ==================================================
 app.on('web-contents-created', (event, contents) => {
   contents.on('will-attach-webview', (event, webPreferences, params) => {
-    console.log('[Flux] will-attach-webview src:', params.src);
-
     if (params.src && params.src.startsWith('flux://')) {
-      console.log('[Flux] Dodaję preload do webview dla:', params.src);
       webPreferences.preload = path.join(__dirname, 'preload.js');
     }
-
     delete webPreferences.preloadURL;
     webPreferences.nodeIntegration = false;
     webPreferences.contextIsolation = true;
   });
 
-  // ⬇️ Otwieranie linków zewnętrznych z WEBVIEW w domyślnej przeglądarce
   contents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith('http://') || url.startsWith('https://')) {
       shell.openExternal(url);
@@ -351,7 +454,6 @@ app.on('web-contents-created', (event, contents) => {
   });
 });
 
-// ⚠️ Rejestracja protokołu MUSI być przed app.whenReady()
 protocol.registerSchemesAsPrivileged([
   {
     scheme: 'flux',
@@ -366,16 +468,60 @@ protocol.registerSchemesAsPrivileged([
 ]);
 
 // ==================================================
+// OPEN-URL Z SYSTEMU
+// ==================================================
+app.on('open-url', (event, url) => {
+  event.preventDefault();
+  console.log('[Flux] macOS open-url:', url);
+
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.focus();
+    mainWindow.webContents.send('open-url', url);
+  } else {
+    pendingUrl = url;
+  }
+});
+
+app.on('second-instance', (event, commandLine) => {
+  const url = commandLine.find(arg => {
+    return arg.startsWith('http://') || arg.startsWith('https://') || arg.startsWith('flux://');
+  });
+
+  if (url) {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+      mainWindow.webContents.send('open-url', url);
+    } else {
+      pendingUrl = url;
+      mainWindow = createWindow();
+    }
+  } else if (mainWindow) {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.focus();
+  }
+});
+
+// ==================================================
 // START
 // ==================================================
 app.whenReady().then(() => {
   appSettings = { ...DEFAULT_SETTINGS, ...loadSettingsFromDisk() };
   console.log('[Flux main] Startowe ustawienia:', appSettings);
-  console.log('[Flux main] userData:', app.getPath('userData'));
+
+  const args = process.argv.slice(1);
+  const urlArg = args.find(arg => {
+    return arg.startsWith('http://') || arg.startsWith('https://') || arg.startsWith('flux://');
+  });
+  if (urlArg) pendingUrl = urlArg;
 
   loadBlockLists();
   registerFluxProtocol();
   mainWindow = createWindow();
+
+  // Uruchom auto-updater
+  setupAutoUpdater();
 
   // ==================================================
   // OKNO
@@ -423,10 +569,7 @@ app.whenReady().then(() => {
   // SETTINGS IPC
   // ==================================================
   ipcMain.handle('settings:get', (_e, key, fallback) => getAppSetting(key, fallback));
-  ipcMain.handle('settings:getAll', () => {
-    console.log('[Flux main] getAll →', appSettings);
-    return appSettings;
-  });
+  ipcMain.handle('settings:getAll', () => appSettings);
   ipcMain.handle('settings:set', (_e, key, value) => {
     setAppSetting(key, value);
     return { ok: true };
@@ -548,9 +691,126 @@ app.whenReady().then(() => {
   });
 
   ipcMain.handle('downloads:list', () => downloads);
+
+  // ==================================================
+  // DOMYŚLNA PRZEGLĄDARKA
+  // ==================================================
+  ipcMain.handle('default:isDefault', async () => {
+    try {
+      if (process.platform === 'darwin') return null;
+
+      if (process.platform === 'win32') {
+        try {
+          const output = execSync(
+            'reg query "HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\Shell\\Associations\\UrlAssociations\\http\\UserChoice" /v ProgId',
+            { encoding: 'utf-8', stdio: 'pipe' }
+          );
+          return output.includes('Flux');
+        } catch (err) {
+          return false;
+        }
+      }
+
+      if (process.platform === 'linux') {
+        try {
+          const output = execSync('xdg-settings get default-web-browser', { encoding: 'utf-8' });
+          return output.includes('flux') || output.includes('Flux');
+        } catch (err) {
+          return false;
+        }
+      }
+
+      return null;
+    } catch (err) {
+      return null;
+    }
+  });
+
+  ipcMain.handle('default:setAsDefault', async () => {
+    try {
+      if (process.platform === 'darwin') {
+        shell.openExternal('x-apple.systempreferences:com.apple.Desktop-Settings.extension');
+        return { ok: true, requiresManual: true, platform: 'darwin' };
+      }
+      if (process.platform === 'win32') {
+        shell.openExternal('ms-settings:defaultapps');
+        return { ok: true, requiresManual: true, platform: 'win32' };
+      }
+      if (process.platform === 'linux') {
+        try {
+          execSync('xdg-settings set default-web-browser flux.desktop');
+          return { ok: true, requiresManual: false, platform: 'linux' };
+        } catch (err) {
+          return { ok: false, error: err.message };
+        }
+      }
+      return { ok: false };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  });
+
+  ipcMain.handle('default:openSettings', async () => {
+    try {
+      if (process.platform === 'darwin') {
+        shell.openExternal('x-apple.systempreferences:com.apple.Desktop-Settings.extension');
+        return { ok: true };
+      }
+      if (process.platform === 'win32') {
+        shell.openExternal('ms-settings:defaultapps');
+        return { ok: true };
+      }
+      return { ok: false, error: 'Brak ustawień systemowych' };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  });
+
+  // ==================================================
+  // APP INFO
+  // ==================================================
+  ipcMain.handle('app:getVersion', () => app.getVersion());
+  ipcMain.handle('app:getPlatform', () => process.platform);
+  ipcMain.handle('app:isPackaged', () => app.isPackaged);
+
+  // ==================================================
+  // UPDATE IPC
+  // ==================================================
+  ipcMain.handle('update:check', async () => {
+    if (!app.isPackaged) {
+      return { ok: false, error: 'Auto-update działa tylko w zbudowanej aplikacji' };
+    }
+    try {
+      const result = await autoUpdater.checkForUpdates();
+      return { ok: true, updateInfo: result?.updateInfo };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  });
+
+  ipcMain.handle('update:download', async () => {
+    if (!app.isPackaged) {
+      return { ok: false, error: 'Auto-update działa tylko w zbudowanej aplikacji' };
+    }
+    try {
+      await autoUpdater.downloadUpdate();
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  });
+
+  ipcMain.on('update:install', () => {
+    if (app.isPackaged) {
+      autoUpdater.quitAndInstall();
+    }
+  });
+
+  ipcMain.handle('update:getCurrentVersion', () => app.getVersion());
 });
 
 app.on('window-all-closed', () => {
+  if (updateCheckInterval) clearInterval(updateCheckInterval);
   if (process.platform !== 'darwin') app.quit();
 });
 

@@ -7,10 +7,6 @@ yarn.lock
 # ===== Build / dist =====
 dist/
 out/
-build/*.icns
-build/*.ico
-build/*.png
-build/*.svg
 !build/entitlements.mac.plist
 !build/entitlements.mac.inherit.plist
 !build/.gitkeep
