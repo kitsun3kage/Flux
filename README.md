@@ -3,7 +3,7 @@
 
 <img src="build/icon.png" alt="Flux" width="128" height="128" />
 
-# 🦊 Flux
+# Flux
 
 **Szybka, lekka i prywatna przeglądarka**
 
