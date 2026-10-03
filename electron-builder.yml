@@ -45,18 +45,6 @@ mac:
       - CFBundleURLName: "Flux Protocol"
         CFBundleURLSchemes:
           - flux
-    CFBundleDocumentTypes:
-      - CFBundleTypeName: "HTML Document"
-        CFBundleTypeRole: "Viewer"
-        LSHandlerRank: "Alternate"
-        LSItemContentTypes:
-          - public.html
-      - CFBundleTypeName: "Web Internet Location"
-        CFBundleTypeRole: "Viewer"
-        LSHandlerRank: "Alternate"
-        LSItemContentTypes:
-          - public.url
-          - public.file-url
 
 dmg:
   title: Flux
@@ -71,38 +59,17 @@ dmg:
       path: /Applications
 
 # ==================================================
-# WINDOWS
+# WINDOWS – minimalna konfiguracja
 # ==================================================
 win:
   target:
     - target: nsis
       arch:
         - x64
-    - target: portable
-      arch:
-        - x64
   icon: build/icon.ico
 
-nsis:
-  oneClick: false
-  perMachine: false
-  allowToChangeInstallationDirectory: true
-  createDesktopShortcut: true
-  createStartMenuShortcut: true
-  shortcutName: Flux
-  artifactName: "${productName}-${version}-Setup.${ext}"
-  uninstallDisplayName: "Flux"
-  installerIcon: build/icon.ico
-  uninstallerIcon: build/icon.ico
-  installerHeaderIcon: build/icon.ico
-  registerUserProtocol: true
-  runAfterFinish: true
-
-portable:
-  artifactName: "${productName}-${version}-Portable.${ext}"
-
 # ==================================================
-# LINUX
+# LINUX – minimalna konfiguracja
 # ==================================================
 linux:
   target:
@@ -127,36 +94,12 @@ linux:
     - Tryb prywatny
     - Menedżer zakładek, historii, haseł i pobierania
   maintainer: Kitsun3 Kage
-  vendor: Kitsun3 Kage
-  mimeTypes:
-    - text/html
-    - text/xml
-    - application/xhtml+xml
-    - x-scheme-handler/http
-    - x-scheme-handler/https
-    - x-scheme-handler/flux
-
-appImage:
-  artifactName: "${productName}-${version}-${arch}.${ext}"
-
-deb:
-  artifactName: "${productName}-${version}-${arch}.${ext}"
-  depends:
-    - libgtk-3-0
-    - libnotify4
-    - libnss3
-    - libxss1
-    - libxtst6
-    - xdg-utils
-    - libatspi2.0-0
-    - libsecret-1-0
 
 # ==================================================
-# PUBLISH + AUTO-UPDATE
+# PUBLISH
 # ==================================================
 publish:
   provider: github
   owner: kitsun3kage
   repo: Flux
   releaseType: release
-  publishAutoUpdate: true
