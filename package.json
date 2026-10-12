@@ -95,11 +95,7 @@
       "target": ["AppImage", "deb"],
       "icon": "build/icon.png",
       "category": "Network",
-      "desktop": {
-        "Name": "Flux",
-        "Comment": "Szybka, lekka i prywatna przeglądarka",
-        "Categories": "Network;WebBrowser;"
-      }
+      "maintainer": "Kitsun3 Kage <kontakt@kitsun3kage.github.io>"
     },
     "publish": {
       "provider": "github",
