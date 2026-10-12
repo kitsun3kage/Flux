@@ -1,5 +1,5 @@
 // ==================================================
-// FLUX – main.js v0.1.1 (auto-update + default browser)
+// FLUX – main.js v0.1.2 (auto-update + default browser)
 // ==================================================
 const { app, BrowserWindow, ipcMain, nativeTheme, shell, session, dialog, protocol, systemPreferences } = require('electron');
 const path = require('path');

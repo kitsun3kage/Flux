@@ -1,7 +1,7 @@
 {
   "name": "flux",
   "productName": "Flux",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Flux – szybka i lekka przeglądarka",
   "author": "Kitsun3 Kage",
   "main": "main.js",
@@ -16,11 +16,16 @@
   "protocols": [
     {
       "name": "Web Browser",
-      "schemes": ["http", "https"]
+      "schemes": [
+        "http",
+        "https"
+      ]
     },
     {
       "name": "Flux Protocol",
-      "schemes": ["flux"]
+      "schemes": [
+        "flux"
+      ]
     }
   ],
   "dependencies": {
