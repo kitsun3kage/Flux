@@ -1,6 +1,6 @@
 // ==================================================
-// FLUX – renderer.js v0.1.2
-// Auto-update + default browser + cross-platform + optimizations
+// FLUX – renderer.js v0.1.4
+// Animacje zakładek + fix białego tła
 // ==================================================
 
 // ===== Platform detection =====
@@ -16,7 +16,7 @@ let tabs = [];
 let activeTabId = null;
 let nextId = 1;
 
-// ===== Cache faviconów (by domain) =====
+// ===== Cache faviconów =====
 const faviconCache = new Map();
 const FAVICON_CACHE_MAX = 200;
 
@@ -116,13 +116,11 @@ function getFaviconUrl(pageUrl) {
     if (pageUrl.startsWith('flux://')) return null;
     const u = new URL(pageUrl);
 
-    // Cache by hostname
     const hostname = u.hostname;
     if (faviconCache.has(hostname)) return faviconCache.get(hostname);
 
     const url = `https://www.google.com/s2/favicons?domain=${hostname}&sz=32`;
 
-    // Limit cache size
     if (faviconCache.size >= FAVICON_CACHE_MAX) {
       const firstKey = faviconCache.keys().next().value;
       faviconCache.delete(firstKey);
@@ -143,40 +141,51 @@ function webviewCall(tab, method, ...args) {
   return undefined;
 }
 
-// ===== Historia =====
-function loadHistory() {
+// ==================================================
+// UKRYWANIE WEBVIEW
+// ==================================================
+// Webview renderuje się w osobnym procesie i ignoruje z-index DOM.
+// Gdy pokazujemy dropdown/menu/modal – chowamy aktywny webview
+// i zmieniamy tło #content na ciemne (żeby nie było białego błysku).
+function setActiveWebviewHidden(hidden) {
+  const tab = tabs.find(t => t.id === activeTabId);
+  if (tab && tab.webview) {
+    tab.webview.style.visibility = hidden ? 'hidden' : 'visible';
+  }
+  contentEl.classList.toggle('webview-hidden', hidden);
+}
+
+// ===== Historia (przez IPC) =====
+let historyCache = [];
+let historyCacheLoaded = false;
+
+async function loadHistory() {
   if (isPrivate) return [];
-  try { return JSON.parse(localStorage.getItem('flux-history') || '[]'); }
-  catch { return []; }
+  if (!window.flux?.history) return [];
+  if (historyCacheLoaded) return historyCache;
+  try {
+    historyCache = await window.flux.history.getAll();
+    historyCacheLoaded = true;
+  } catch { historyCache = []; }
+  return historyCache;
 }
 
-function saveHistory(history) {
-  if (isPrivate) return;
-  if (history.length > 500) history = history.slice(-500);
-  localStorage.setItem('flux-history', JSON.stringify(history));
+function invalidateHistoryCache() {
+  historyCacheLoaded = false;
 }
 
-let historySaveTimer = null;
-function scheduleHistorySave() {
-  if (historySaveTimer) return;
-  historySaveTimer = setTimeout(() => {
-    historySaveTimer = null;
-    saveHistory(historyCache);
-  }, 500);
-}
-
-let historyCache = null;
 function addToHistory(url, title) {
   if (isPrivate) return;
   if (!getSetting('saveHistory')) return;
   if (!url || url === 'about:blank' || url.startsWith('file://')) return;
   if (url.startsWith('flux://')) return;
+  if (!window.flux?.history) return;
+  window.flux.history.add({ url, title: title || url });
+  invalidateHistoryCache();
+}
 
-  if (!historyCache) historyCache = loadHistory();
-  if (historyCache.length > 0 && historyCache[historyCache.length - 1].url === url) return;
-
-  historyCache.push({ url, title: title || url, ts: Date.now() });
-  scheduleHistorySave();
+if (window.flux?.history?.onUpdate) {
+  window.flux.history.onUpdate(() => invalidateHistoryCache());
 }
 
 // ===== Zakładki (bookmarks) =====
@@ -362,7 +371,7 @@ function showUpdateBanner(info) {
     position: fixed; top: 50px; left: 50%; transform: translateX(-50%);
     background: linear-gradient(135deg, #A78BFA, #7C3AED);
     color: white; padding: 12px 16px; border-radius: 12px;
-    box-shadow: 0 12px 40px rgba(0,0,0,0.4); z-index: 10000;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.4); z-index: 99999;
     min-width: 480px; max-width: 90vw;
     font-family: -apple-system, system-ui, sans-serif;
     animation: updateSlideIn 0.3s ease;
@@ -563,10 +572,15 @@ function createTab(url) {
   });
   tabsEl.appendChild(tabEl);
 
-  const tab = { id, webview, tabEl, title: 'Nowa karta', url: startUrl };
+  // ⬇️ Animacja otwarcia
+  tabEl.classList.add('tab-opening');
+  tabEl.addEventListener('animationend', () => {
+    tabEl.classList.remove('tab-opening');
+  }, { once: true });
+
+  const tab = { id, webview, tabEl, title: 'Nowa karta', url: startUrl, closing: false };
   tabs.push(tab);
 
-  // Zdarzenia webview
   webview.addEventListener('did-navigate', (e) => {
     const url = e.url;
 
@@ -656,25 +670,52 @@ function activateTab(id) {
   });
 }
 
+// ⬇️ PRZEPISANE: animacja zamykania
 function closeTab(id) {
   const idx = tabs.findIndex(t => t.id === id);
   if (idx === -1) return;
-  const [tab] = tabs.splice(idx, 1);
+  const tab = tabs[idx];
+  if (tab.closing) return;
+  tab.closing = true;
 
-  // Usuń z DOM
-  tab.webview.remove();
-  tab.tabEl.remove();
-
-  if (tabs.length === 0) {
-    if (isPrivate) {
-      if (window.flux?.window) window.flux.window.close();
-      return;
-    }
-    createTab();
-  } else if (activeTabId === id) {
-    const next = tabs[Math.max(0, idx - 1)];
-    activateTab(next.id);
+  // Jeśli zamykamy aktywną kartę – od razu przełącz na sąsiada
+  if (activeTabId === id) {
+    const prev = tabs.slice(0, idx).reverse().find(t => !t.closing);
+    const next = tabs.slice(idx + 1).find(t => !t.closing);
+    const target = prev || next;
+    if (target) activateTab(target.id);
   }
+
+  // Ukryj webview natychmiast (jego animacja i tak by była niewidoczna)
+  if (tab.webview) tab.webview.style.display = 'none';
+
+  // Animacja zamykania
+  tab.tabEl.classList.add('tab-closing');
+
+  let finalized = false;
+  const finalize = () => {
+    if (finalized) return;
+    finalized = true;
+
+    const idx2 = tabs.findIndex(t => t.id === id);
+    if (idx2 === -1) return;
+    tabs.splice(idx2, 1);
+    tab.webview.remove();
+    tab.tabEl.remove();
+
+    // Jeśli to była ostatnia karta
+    if (tabs.length === 0) {
+      if (isPrivate) {
+        if (window.flux?.window) window.flux.window.close();
+        return;
+      }
+      createTab();
+    }
+  };
+
+  tab.tabEl.addEventListener('animationend', finalize, { once: true });
+  // Fallback na wypadek gdyby animationend nie odpalił
+  setTimeout(finalize, 320);
 }
 
 function updateTabUrl(id, url) {
@@ -733,17 +774,17 @@ if (window.flux && window.flux.adblock) {
 urlShield.addEventListener('click', () => openShield());
 
 // ==================================================
-// AUTOCOMPLETE (z debouncing)
+// AUTOCOMPLETE
 // ==================================================
 let autocompleteItems = [];
 let autocompleteIndex = -1;
 let autocompleteDebounceTimer = null;
 
-function showAutocomplete(query) {
+async function showAutocomplete(query) {
   const value = query.trim().toLowerCase();
   if (!value) { hideAutocomplete(); return; }
 
-  const history = loadHistory();
+  const history = await loadHistory();
   const bookmarks = loadBookmarks();
   const seen = new Set();
   const suggestions = [];
@@ -798,6 +839,9 @@ function renderAutocomplete(items) {
   autocompleteIndex = -1;
   if (items.length === 0) { hideAutocomplete(); return; }
 
+  // ⬇️ Ukryj webview (żeby dropdown był widoczny)
+  setActiveWebviewHidden(true);
+
   const fragment = document.createDocumentFragment();
 
   items.forEach((item, i) => {
@@ -829,6 +873,7 @@ function hideAutocomplete() {
   urlAutocomplete.classList.remove('visible');
   autocompleteItems = [];
   autocompleteIndex = -1;
+  setActiveWebviewHidden(false);
 }
 
 function selectAutocomplete(index) {
@@ -881,14 +926,14 @@ btnBookmark.addEventListener('click', () => {
 
 urlInput.addEventListener('input', () => {
   if (autocompleteDebounceTimer) clearTimeout(autocompleteDebounceTimer);
-  autocompleteDebounceTimer = setTimeout(() => {
+  autocompleteDebounceTimer = setTimeout(async () => {
     autocompleteDebounceTimer = null;
-    showAutocomplete(urlInput.value);
+    await showAutocomplete(urlInput.value);
   }, 120);
 });
 
-urlInput.addEventListener('focus', () => {
-  if (urlInput.value) showAutocomplete(urlInput.value);
+urlInput.addEventListener('focus', async () => {
+  if (urlInput.value) await showAutocomplete(urlInput.value);
 });
 
 urlInput.addEventListener('blur', () => setTimeout(hideAutocomplete, 150));
@@ -919,6 +964,7 @@ urlInput.addEventListener('keydown', (e) => {
 
 // ===== Menu =====
 function openMenu() {
+  setActiveWebviewHidden(true);
   menuEl.classList.add('open');
   menuOverlay.classList.add('visible');
   menuEl.setAttribute('aria-hidden', 'false');
@@ -929,6 +975,7 @@ function closeMenu() {
   menuEl.classList.remove('open');
   menuOverlay.classList.remove('visible');
   menuEl.setAttribute('aria-hidden', 'true');
+  setActiveWebviewHidden(false);
 }
 
 function toggleMenu() {
@@ -941,6 +988,7 @@ menuOverlay.addEventListener('click', closeMenu);
 
 // ===== Shield =====
 function openShield() {
+  setActiveWebviewHidden(true);
   shieldEl.classList.add('open');
   shieldOverlay.classList.add('visible');
   shieldEl.setAttribute('aria-hidden', 'false');
@@ -952,6 +1000,7 @@ function closeShield() {
   shieldEl.classList.remove('open');
   shieldOverlay.classList.remove('visible');
   shieldEl.setAttribute('aria-hidden', 'true');
+  setActiveWebviewHidden(false);
 }
 
 function toggleShield() {
@@ -1004,7 +1053,6 @@ document.getElementById('shield-adblock-toggle')?.addEventListener('change', asy
   }
 });
 
-// Polling stats tylko gdy panel otwarty (5s zamiast 2s)
 setInterval(() => {
   if (shieldEl.classList.contains('open')) updateShieldStats();
 }, 5000);
@@ -1064,6 +1112,7 @@ function toggleFullscreen() {
 
 // ===== Modal helpers =====
 function openModal(overlayId) {
+  setActiveWebviewHidden(true);
   const el = document.getElementById(overlayId);
   if (el) el.classList.add('open');
 }
@@ -1071,6 +1120,7 @@ function openModal(overlayId) {
 function closeModal(overlayId) {
   const el = document.getElementById(overlayId);
   if (el) el.classList.remove('open');
+  setActiveWebviewHidden(false);
 }
 
 document.querySelectorAll('.modal-close').forEach(btn => {
@@ -1182,12 +1232,13 @@ async function renderPasswords() {
 
 // ===== Sync =====
 document.getElementById('export-data')?.addEventListener('click', async () => {
+  const history = await loadHistory();
   const data = {
-    version: '0.1.2',
+    version: '0.1.3',
     exportedAt: new Date().toISOString(),
     settings: settingsCache,
     bookmarks: loadBookmarks(),
-    history: loadHistory()
+    history: history
   };
 
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -1214,7 +1265,10 @@ document.getElementById('import-data')?.addEventListener('click', () => {
           for (const [k, v] of Object.entries(data.settings)) await setSetting(k, v);
         }
         if (data.bookmarks) saveBookmarks(data.bookmarks);
-        if (data.history)   saveHistory(data.history);
+        if (data.history && window.flux?.history) {
+          await window.flux.history.addMany(data.history);
+          invalidateHistoryCache();
+        }
         alert('Dane zaimportowane. Zrestartuj przeglądarkę.');
       } catch (err) {
         alert('Nie udało się zaimportować: ' + err.message);
@@ -1226,48 +1280,41 @@ document.getElementById('import-data')?.addEventListener('click', () => {
 });
 
 // ==================================================
-// SKRÓTY KLAWISZOWE (cross-platform)
+// SKRÓTY KLAWISZOWE
 // ==================================================
 document.addEventListener('keydown', (e) => {
-  // Modyfikator: ⌘ na Mac, Ctrl na Windows/Linux
   const mod = isMac ? e.metaKey : e.ctrlKey;
 
-  // Nowe okno prywatne: ⌘⇧N / Ctrl+Shift+N
   if (mod && e.shiftKey && (e.key === 'N' || e.key === 'n')) {
     e.preventDefault();
     if (window.flux?.window) window.flux.window.newPrivate();
     return;
   }
 
-  // Nowa karta: ⌘T / Ctrl+T
   if (mod && (e.key === 't' || e.key === 'T')) {
     e.preventDefault();
     createTab();
     return;
   }
 
-  // Nowe okno: ⌘N / Ctrl+N
   if (mod && (e.key === 'n' || e.key === 'N')) {
     e.preventDefault();
     if (window.flux?.window) window.flux.window.newWindow();
     return;
   }
 
-  // Zamknij kartę: ⌘W / Ctrl+W
   if (mod && (e.key === 'w' || e.key === 'W')) {
     e.preventDefault();
     if (activeTabId) closeTab(activeTabId);
     return;
   }
 
-  // Zamknij aplikację: ⌘Q / Ctrl+Q
   if (mod && (e.key === 'q' || e.key === 'Q')) {
     e.preventDefault();
     if (window.flux?.window) window.flux.window.close();
     return;
   }
 
-  // Focus URL: ⌘L / Ctrl+L
   if (mod && (e.key === 'l' || e.key === 'L')) {
     e.preventDefault();
     urlInput.focus();
@@ -1275,14 +1322,12 @@ document.addEventListener('keydown', (e) => {
     return;
   }
 
-  // Zakładka: ⌘D / Ctrl+D
   if (mod && (e.key === 'd' || e.key === 'D')) {
     e.preventDefault();
     btnBookmark.click();
     return;
   }
 
-  // Historia: ⌘Y (Mac) / Ctrl+H (Windows/Linux)
   if (isMac && e.metaKey && (e.key === 'y' || e.key === 'Y')) {
     e.preventDefault();
     handleMenuAction('history');
@@ -1294,21 +1339,18 @@ document.addEventListener('keydown', (e) => {
     return;
   }
 
-  // Pobrane: ⌘J / Ctrl+J
   if (mod && (e.key === 'j' || e.key === 'J')) {
     e.preventDefault();
     handleMenuAction('downloads');
     return;
   }
 
-  // Ustawienia: ⌘, / Ctrl+,
   if (mod && e.key === ',') {
     e.preventDefault();
     handleMenuAction('settings');
     return;
   }
 
-  // Odśwież: F5 lub ⌘R / Ctrl+R
   if (e.key === 'F5' || (mod && (e.key === 'r' || e.key === 'R'))) {
     e.preventDefault();
     const t = tabs.find(t => t.id === activeTabId);
@@ -1316,7 +1358,6 @@ document.addEventListener('keydown', (e) => {
     return;
   }
 
-  // Zoom: ⌘+ / Ctrl+ / ⌘- / Ctrl- / ⌘0 / Ctrl+0
   if (mod && (e.key === '=' || e.key === '+')) {
     e.preventDefault();
     handleZoom('zoom-in');
@@ -1333,7 +1374,6 @@ document.addEventListener('keydown', (e) => {
     return;
   }
 
-  // Escape
   if (e.key === 'Escape') {
     closeMenu();
     closeShield();
@@ -1341,10 +1381,10 @@ document.addEventListener('keydown', (e) => {
 });
 
 // ==================================================
-// WYKRYWANIE PLATFORMY – aktualizacja skrótów w menu
+// SKRÓTY – platforma
 // ==================================================
 function updateShortcutsForPlatform() {
-  if (isMac) return; // Mac ma domyślnie ⌘ w HTML
+  if (isMac) return;
 
   document.querySelectorAll('.menu-shortcut').forEach(el => {
     let text = el.textContent;
@@ -1352,7 +1392,6 @@ function updateShortcutsForPlatform() {
     text = text.replace(/⇧/g, 'Shift+');
     text = text.replace(/⌥/g, 'Alt+');
     text = text.replace(/⌃/g, 'Ctrl+');
-    // Uporządkuj
     text = text.replace(/Ctrl\+Shift\+/g, 'Ctrl+Shift+');
     el.textContent = text;
   });
@@ -1362,13 +1401,10 @@ function updateShortcutsForPlatform() {
 // START
 // ==================================================
 (async () => {
-  log('Startuję renderer v0.1.2... (platform:', isMac ? 'macOS' : 'Windows/Linux', ')');
+  log('Startuję renderer v0.1.3... (platform:', isMac ? 'macOS' : 'Windows/Linux', ')');
   log('Tryb prywatny:', isPrivate);
 
-  // Aktualizuj skróty dla platformy
   updateShortcutsForPlatform();
-
-  // Nasłuchy
   setupOpenUrlListener();
   setupUpdateListeners();
 

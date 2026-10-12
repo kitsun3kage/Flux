@@ -302,7 +302,7 @@
     </div>
 
     <div class="footer">
-      Wersja 0.1.1 • <strong>Kitsun3 Kage</strong> • <a href="https://kitsun3kage.github.io" target="_blank" rel="noopener">kitsun3kage.github.io</a>
+      Wersja <span id="version-label">0.1.3</span> • <strong>Kitsun3 Kage</strong> • <a href="https://kitsun3kage.github.io" target="_blank" rel="noopener">kitsun3kage.github.io</a>
     </div>
   </div>
 
@@ -326,6 +326,7 @@
 
   <script>
     const PALETTES = {
+      neutral: ['#8AB4F8', '#669DF6', '#1A73E8'],
       default: ['#4A9EFF', '#1E6FDC', '#0A2A6B'],
       emerald: ['#6EE7B7', '#10B981', '#064E3B'],
       violet:  ['#A78BFA', '#7C3AED', '#4C1D95'],
@@ -334,7 +335,6 @@
       cyan:    ['#67E8F9', '#06B6D4', '#164E63']
     };
 
-    // ===== SETTINGS CACHE =====
     let settingsCache = {};
 
     async function loadAllSettings() {
@@ -356,7 +356,6 @@
       }
     }
 
-    // ===== MOTYW / PALETA =====
     function applyTheme(theme) {
       let resolved = theme;
       if (theme === 'system') {
@@ -366,13 +365,13 @@
     }
 
     function applyPalette(paletteId) {
-      if (!paletteId) paletteId = 'default';
+      if (!paletteId) paletteId = 'neutral';
       document.documentElement.setAttribute('data-palette', paletteId);
       updateLogo(paletteId);
     }
 
     function updateLogo(paletteId) {
-      const [g1, g2, g3] = PALETTES[paletteId] || PALETTES.default;
+      const [g1, g2, g3] = PALETTES[paletteId] || PALETTES.neutral;
       const svg = `<svg width="256" height="256" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
       <defs>
         <clipPath id="c"><circle cx="128" cy="128" r="112" /></clipPath>
@@ -542,10 +541,15 @@
       }
     });
 
-    // ===== OSTATNIO =====
-    function renderRecent() {
-      const history = JSON.parse(localStorage.getItem('flux-history') || '[]');
-      const recent = history.slice(-5).reverse();
+    // ===== OSTATNIO (przez IPC) =====
+    async function renderRecent() {
+      if (!window.flux?.history) return;
+      let history = [];
+      try {
+        history = await window.flux.history.getAll();
+      } catch { return; }
+
+      const recent = history.slice(-20).reverse();
 
       if (recent.length === 0) {
         document.getElementById('recent-section').style.display = 'none';
@@ -589,7 +593,7 @@
       });
     }
 
-    // ===== NASŁUCH ZMIAN Z MAIN PROCESS =====
+    // ===== NASŁUCH ZMIAN =====
     if (window.flux?.settings) {
       window.flux.settings.onChange(({ key, value }) => {
         settingsCache[key] = value;
@@ -598,17 +602,32 @@
       });
     }
 
+    // Nasłuchuj zmian historii
+    if (window.flux?.history?.onUpdate) {
+      window.flux.history.onUpdate(() => renderRecent());
+    }
+
     window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => {
       if (getSetting('theme', 'dark') === 'system') applyTheme('system');
     });
+
+    // ===== WERSJA =====
+    async function updateVersionLabel() {
+      if (!window.flux?.app?.getVersion) return;
+      try {
+        const v = await window.flux.app.getVersion();
+        document.getElementById('version-label').textContent = v;
+      } catch {}
+    }
 
     // ===== START =====
     (async () => {
       await loadAllSettings();
       applyTheme(getSetting('theme', 'dark'));
-      applyPalette(getSetting('palette', 'default'));
+      applyPalette(getSetting('palette', 'neutral'));
       renderShortcuts();
-      renderRecent();
+      await renderRecent();
+      updateVersionLabel();
     })();
   </script>
 </body>

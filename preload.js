@@ -1,7 +1,7 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('flux', {
-  version: '0.1.2',
+  version: '0.1.3',
   name: 'Flux',
 
   window: {
@@ -27,12 +27,20 @@ contextBridge.exposeInMainWorld('flux', {
     getStats:   () => ipcRenderer.invoke('adblock:getStats'),
     resetStats: () => ipcRenderer.send('adblock:resetStats'),
     setSiteException:  (hostname, exclude) => ipcRenderer.invoke('adblock:setSiteException', hostname, exclude),
-    isSiteExcluded:    (hostname) => ipcRenderer.invoke('adblock:isSiteExcluded', hostname),
     onBlocked: (cb) => ipcRenderer.on('adblock:blocked', (_e, data) => cb(data))
   },
 
   privacy: {
     clearData: (options) => ipcRenderer.invoke('privacy:clearData', options)
+  },
+
+  history: {
+    getAll:   ()         => ipcRenderer.invoke('history:getAll'),
+    add:      (entry)    => ipcRenderer.invoke('history:add', entry),
+    addMany:  (entries)  => ipcRenderer.invoke('history:addMany', entries),
+    remove:   (ts)       => ipcRenderer.invoke('history:remove', ts),
+    clear:    ()         => ipcRenderer.invoke('history:clear'),
+    onUpdate: (cb)       => ipcRenderer.on('history:updated', (_e, data) => cb(data))
   },
 
   passwords: {
@@ -63,7 +71,6 @@ contextBridge.exposeInMainWorld('flux', {
     openSettings: () => ipcRenderer.invoke('default:openSettings')
   },
 
-  // ⬇️ NOWE: Auto-update
   update: {
     check: () => ipcRenderer.invoke('update:check'),
     download: () => ipcRenderer.invoke('update:download'),

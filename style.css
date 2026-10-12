@@ -1,6 +1,6 @@
 /* ==================================================
-   FLUX – style.css v0.1.2
-   Zaokrąglony • Minimalistyczny • Szybki
+   FLUX – style.css v0.1.4
+   Animacje zakładek + fix białego tła
    ================================================== */
 
 /* ===== Reset ===== */
@@ -78,7 +78,6 @@ html, :root, [data-palette="neutral"] {
 
   --content-bg: #FFFFFF;
 
-  /* ===== Zaokrąglenia – DUŻE ===== */
   --r-sm: 8px;
   --r-md: 12px;
   --r-lg: 16px;
@@ -141,10 +140,6 @@ body {
   text-rendering: optimizeSpeed;
 }
 
-#topbar, #navbar {
-  contain: layout style paint;
-}
-
 /* ==================================================
    TOPBAR
    ================================================== */
@@ -158,6 +153,9 @@ body {
   -webkit-app-region: drag;
   user-select: none;
   flex-shrink: 0;
+  contain: layout style;
+  position: relative;
+  z-index: 1000;
 }
 
 #traffic-spacer {
@@ -186,7 +184,6 @@ body {
   gap: 8px;
   padding: 0 12px;
   background: transparent;
-  /* ⬇️ Zaokrąglona pigułka */
   border-radius: var(--r-pill);
   cursor: pointer;
   font-size: 12.5px;
@@ -198,7 +195,7 @@ body {
   position: relative;
   flex-shrink: 0;
   -webkit-app-region: no-drag;
-  will-change: background-color;
+  will-change: background-color, transform, opacity;
   transition: background 0.12s;
 }
 
@@ -210,6 +207,55 @@ body {
 .tab.active {
   background: var(--bg-3);
   color: var(--text-0);
+}
+
+/* ===== Animacje zakładek ===== */
+@keyframes tabOpen {
+  from {
+    opacity: 0;
+    max-width: 0;
+    min-width: 0;
+    padding-left: 0;
+    padding-right: 0;
+    transform: scale(0.6);
+  }
+  to {
+    opacity: 1;
+    max-width: 200px;
+    min-width: 100px;
+    padding-left: 12px;
+    padding-right: 12px;
+    transform: scale(1);
+  }
+}
+
+@keyframes tabClose {
+  from {
+    opacity: 1;
+    max-width: 200px;
+    min-width: 100px;
+    padding-left: 12px;
+    padding-right: 12px;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    max-width: 0;
+    min-width: 0;
+    padding-left: 0;
+    padding-right: 0;
+    transform: scale(0.6);
+  }
+}
+
+.tab.tab-opening {
+  animation: tabOpen 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.tab.tab-closing {
+  animation: tabClose 0.22s cubic-bezier(0.4, 0, 1, 1) forwards;
+  pointer-events: none;
+  overflow: hidden;
 }
 
 .tab .favicon {
@@ -279,7 +325,6 @@ body {
   color: var(--text-1);
   width: 32px;
   height: 32px;
-  /* ⬇️ Zaokrąglone do kwadratu */
   border-radius: var(--r-md);
   cursor: pointer;
   display: flex;
@@ -305,7 +350,6 @@ body {
   font-size: 9px;
   font-weight: 700;
   padding: 1px 5px;
-  /* ⬇️ Pigułka */
   border-radius: var(--r-pill);
   min-width: 14px;
   height: 14px;
@@ -329,6 +373,9 @@ body {
   background: var(--bg-1);
   -webkit-app-region: no-drag;
   flex-shrink: 0;
+  contain: layout style;
+  position: relative;
+  z-index: 1000;
 }
 
 #nav-buttons {
@@ -344,7 +391,6 @@ body {
   color: var(--text-0);
   width: 34px;
   height: 34px;
-  /* ⬇️ Zaokrąglone do kwadratu */
   border-radius: var(--r-md);
   cursor: pointer;
   display: flex;
@@ -376,7 +422,6 @@ body {
   align-items: center;
   gap: 8px;
   background: var(--bg-2);
-  /* ⬇️ Pełna pigułka */
   border-radius: var(--r-pill);
   padding: 0 6px 0 16px;
   height: 36px;
@@ -427,7 +472,6 @@ body {
   padding: 3px 9px;
   background: rgba(var(--accent-rgb), 0.15);
   color: var(--accent-main);
-  /* ⬇️ Pigułka */
   border-radius: var(--r-pill);
   font-size: 11px;
   font-weight: 600;
@@ -446,7 +490,6 @@ body {
   cursor: pointer;
   width: 28px;
   height: 28px;
-  /* ⬇️ Pigułka */
   border-radius: var(--r-pill);
   display: flex;
   align-items: center;
@@ -473,13 +516,12 @@ body {
   right: 0;
   background: var(--bg-3);
   border: 1px solid var(--border);
-  /* ⬇️ Duże zaokrąglenie */
   border-radius: var(--r-lg);
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
   max-height: 320px;
   overflow-y: auto;
   display: none;
-  z-index: 500;
+  z-index: 99999;
   padding: 6px;
 }
 
@@ -490,7 +532,6 @@ body {
   align-items: center;
   gap: 10px;
   padding: 8px 10px;
-  /* ⬇️ Zaokrąglony element */
   border-radius: var(--r-md);
   cursor: pointer;
 }
@@ -513,7 +554,6 @@ body {
 .autocomplete-icon img {
   width: 16px;
   height: 16px;
-  /* ⬇️ Zaokrąglona ikona */
   border-radius: 4px;
 }
 
@@ -547,7 +587,6 @@ body {
   flex-shrink: 0;
   font-weight: 500;
   padding: 2px 8px;
-  /* ⬇️ Pigułka */
   border-radius: var(--r-pill);
   background: var(--bg-2);
 }
@@ -560,7 +599,15 @@ body {
   position: relative;
   background: var(--content-bg);
   overflow: hidden;
-  contain: strict;
+  contain: layout style;
+  z-index: 1;
+  /* ⬇️ Płynne przejście tła gdy chowamy webview */
+  transition: background 0.15s ease;
+}
+
+/* ⬇️ Gdy webview jest schowany (dropdown/menu/modal) – tło app, nie białe */
+#content.webview-hidden {
+  background: var(--bg-0);
 }
 
 #content webview {
@@ -595,10 +642,9 @@ body {
   overflow-y: auto;
   background: var(--bg-2);
   border: 1px solid var(--border);
-  /* ⬇️ BARDZO zaokrąglone */
   border-radius: var(--r-2xl);
   box-shadow: 0 12px 48px rgba(0, 0, 0, 0.6);
-  z-index: 1000;
+  z-index: 10000;
   padding: 8px;
   opacity: 0;
   transform: translateY(-6px) scale(0.96);
@@ -624,7 +670,6 @@ body {
   gap: 12px;
   padding: 12px 14px;
   background: var(--bg-3);
-  /* ⬇️ Zaokrąglony header */
   border-radius: var(--r-lg);
   margin-bottom: 8px;
 }
@@ -632,7 +677,6 @@ body {
 .menu-logo {
   width: 36px;
   height: 36px;
-  /* ⬇️ Kółko */
   border-radius: 50%;
   flex-shrink: 0;
 }
@@ -677,7 +721,6 @@ body {
   padding: 9px 12px;
   background: transparent;
   border: none;
-  /* ⬇️ Duże zaokrąglenie */
   border-radius: var(--r-md);
   cursor: pointer;
   color: var(--text-0);
@@ -750,7 +793,6 @@ body {
 .zoom-btn {
   width: 28px;
   height: 28px;
-  /* ⬇️ Kółko */
   border-radius: 50%;
   background: var(--bg-3);
   border: none;
@@ -776,7 +818,6 @@ body {
   cursor: pointer;
   min-width: 48px;
   padding: 4px 6px;
-  /* ⬇️ Pigułka */
   border-radius: var(--r-pill);
   text-align: center;
   font-variant-numeric: tabular-nums;
@@ -818,10 +859,9 @@ body {
   overflow-y: auto;
   background: var(--bg-2);
   border: 1px solid var(--border);
-  /* ⬇️ BARDZO zaokrąglone */
   border-radius: var(--r-2xl);
   box-shadow: 0 12px 48px rgba(0, 0, 0, 0.6);
-  z-index: 1000;
+  z-index: 10000;
   padding: 0;
   opacity: 0;
   transform: translateY(-6px) scale(0.96);
@@ -847,7 +887,6 @@ body {
   justify-content: center;
   width: 48px;
   height: 48px;
-  /* ⬇️ Kółko */
   border-radius: 50%;
   background: rgba(var(--accent-rgb), 0.15);
   color: var(--accent-main);
@@ -940,7 +979,6 @@ body {
   color: var(--green);
   padding: 3px 8px;
   background: rgba(129, 201, 149, 0.15);
-  /* ⬇️ Pigułka */
   border-radius: var(--r-pill);
   letter-spacing: 0.5px;
 }
@@ -952,7 +990,6 @@ body {
   padding: 10px;
   background: transparent;
   border: 1px solid var(--border);
-  /* ⬇️ Zaokrąglony przycisk */
   border-radius: var(--r-md);
   color: var(--text-1);
   font-size: 12.5px;
@@ -973,7 +1010,7 @@ body {
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0);
-  z-index: 1100;
+  z-index: 11000;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -994,7 +1031,6 @@ body {
   max-height: 80vh;
   background: var(--bg-2);
   border: 1px solid var(--border);
-  /* ⬇️ BARDZO zaokrąglone */
   border-radius: var(--r-2xl);
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.7);
   display: flex;
@@ -1029,7 +1065,6 @@ body {
   font-size: 20px;
   width: 32px;
   height: 32px;
-  /* ⬇️ Kółko */
   border-radius: 50%;
   cursor: pointer;
   display: flex;
@@ -1061,7 +1096,6 @@ body {
    ================================================== */
 .btn-secondary, .btn-danger {
   padding: 9px 18px;
-  /* ⬇️ Pigułka */
   border-radius: var(--r-pill);
   border: 1px solid var(--border);
   background: transparent;
@@ -1107,7 +1141,6 @@ body {
   inset: 0;
   background: var(--bg-3);
   border: 1px solid var(--border);
-  /* ⬇️ Pigułka */
   border-radius: var(--r-pill);
   transition: 0.18s;
 }
@@ -1142,7 +1175,6 @@ body {
   align-items: center;
   gap: 12px;
   padding: 10px 12px;
-  /* ⬇️ Zaokrąglony element */
   border-radius: var(--r-md);
   cursor: pointer;
   transition: background 0.12s;
@@ -1153,7 +1185,6 @@ body {
 .list-item-favicon {
   width: 16px;
   height: 16px;
-  /* ⬇️ Zaokrąglona ikona */
   border-radius: 4px;
   flex-shrink: 0;
   background: var(--bg-hover);
@@ -1191,7 +1222,7 @@ body {
 }
 
 /* ==================================================
-   SETTINGS GROUP (dla modala sync)
+   SETTINGS GROUP
    ================================================== */
 .settings-group {
   padding: 16px 0;

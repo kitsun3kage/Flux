@@ -1,5 +1,5 @@
 // ==================================================
-// FLUX – main.js v0.1.2 (auto-update + default browser)
+// FLUX – main.js v0.1.3 (history shared via IPC)
 // ==================================================
 const { app, BrowserWindow, ipcMain, nativeTheme, shell, session, dialog, protocol, systemPreferences } = require('electron');
 const path = require('path');
@@ -90,6 +90,49 @@ function setAppSetting(key, value) {
       win.webContents.send('settings:changed', { key, value });
     }
   });
+}
+
+// ==================================================
+// HISTORIA (współdzielona między oknami i webview)
+// ==================================================
+const historyFile = path.join(app.getPath('userData'), 'flux-history.json');
+const HISTORY_LIMIT = 500;
+
+function loadHistoryFromDisk() {
+  try {
+    if (fs.existsSync(historyFile)) {
+      const data = JSON.parse(fs.readFileSync(historyFile, 'utf-8'));
+      return Array.isArray(data) ? data : [];
+    }
+  } catch (err) {
+    console.error('[Flux] Błąd ładowania historii:', err);
+  }
+  return [];
+}
+
+function saveHistoryToDisk(history) {
+  try {
+    const trimmed = history.slice(-HISTORY_LIMIT);
+    fs.writeFileSync(historyFile, JSON.stringify(trimmed));
+  } catch (err) {
+    console.error('[Flux] Błąd zapisu historii:', err);
+  }
+}
+
+let historyCache = null;
+let historySaveTimer = null;
+
+function scheduleHistorySave() {
+  if (historySaveTimer) return;
+  historySaveTimer = setTimeout(() => {
+    historySaveTimer = null;
+    if (historyCache) saveHistoryToDisk(historyCache);
+  }, 300);
+}
+
+function getHistory() {
+  if (!historyCache) historyCache = loadHistoryFromDisk();
+  return historyCache;
 }
 
 // ==================================================
@@ -272,6 +315,22 @@ function registerFluxProtocol() {
       }
     }
 
+    // Fallback: szukaj w katalogu głównym (dla *.html)
+    if (!pathname || pathname === '/') {
+      const fallback = path.join(__dirname, `${hostname}.html`);
+      if (fs.existsSync(fallback)) {
+        try {
+          const html = fs.readFileSync(fallback, 'utf-8');
+          return new Response(html, {
+            status: 200,
+            headers: { 'content-type': 'text/html; charset=utf-8' }
+          });
+        } catch (err) {
+          console.error('[Flux] Błąd czytania fallback:', fallback, err);
+        }
+      }
+    }
+
     return new Response(
       `<html><body style="font-family:system-ui;background:#1F1F1F;color:#E8EAED;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;flex-direction:column;gap:16px">
         <h1 style="font-size:48px;margin:0">404</h1>
@@ -286,7 +345,6 @@ function registerFluxProtocol() {
 // AUTO-UPDATE
 // ==================================================
 function setupAutoUpdater() {
-  // Logger
   autoUpdater.logger = {
     info: (msg) => console.log('[AutoUpdate]', msg),
     warn: (msg) => console.warn('[AutoUpdate]', msg),
@@ -297,7 +355,6 @@ function setupAutoUpdater() {
   autoUpdater.autoDownload = false;
   autoUpdater.autoInstallOnAppQuit = true;
 
-  // Nie sprawdzaj w dev
   if (!app.isPackaged) {
     console.log('[AutoUpdate] Pomijam – tryb dev');
     return;
@@ -349,7 +406,6 @@ function setupAutoUpdater() {
     });
   });
 
-  // Sprawdź po 15 sekundach od startu
   setTimeout(() => {
     if (getAppSetting('autoUpdate', true)) {
       autoUpdater.checkForUpdates().catch(err => {
@@ -358,7 +414,6 @@ function setupAutoUpdater() {
     }
   }, 15000);
 
-  // Sprawdzaj co 6 godzin
   updateCheckInterval = setInterval(() => {
     if (getAppSetting('autoUpdate', true)) {
       autoUpdater.checkForUpdates().catch(() => {});
@@ -520,7 +575,6 @@ app.whenReady().then(() => {
   registerFluxProtocol();
   mainWindow = createWindow();
 
-  // Uruchom auto-updater
   setupAutoUpdater();
 
   // ==================================================
@@ -572,6 +626,73 @@ app.whenReady().then(() => {
   ipcMain.handle('settings:getAll', () => appSettings);
   ipcMain.handle('settings:set', (_e, key, value) => {
     setAppSetting(key, value);
+    return { ok: true };
+  });
+
+  // ==================================================
+  // HISTORIA IPC
+  // ==================================================
+  ipcMain.handle('history:getAll', () => {
+    if (!getAppSetting('saveHistory', true)) return [];
+    return getHistory();
+  });
+
+  ipcMain.handle('history:add', (_e, entry) => {
+    if (!entry || !entry.url) return { ok: false };
+    if (!getAppSetting('saveHistory', true)) return { ok: false };
+
+    const history = getHistory();
+    const last = history[history.length - 1];
+
+    // Dedupe: ten sam URL w ciągu 2 sekund → tylko zaktualizuj tytuł
+    if (last && last.url === entry.url && Date.now() - last.ts < 2000) {
+      if (entry.title) last.title = entry.title;
+      scheduleHistorySave();
+      return { ok: true, updated: true };
+    }
+
+    history.push({
+      url: entry.url,
+      title: entry.title || entry.url,
+      ts: entry.ts || Date.now()
+    });
+    scheduleHistorySave();
+    broadcastToWindows('history:updated', { url: entry.url });
+    return { ok: true };
+  });
+
+  ipcMain.handle('history:addMany', (_e, entries) => {
+    if (!Array.isArray(entries)) return { ok: false };
+    const history = getHistory();
+    entries.forEach(e => {
+      if (e && e.url) {
+        history.push({
+          url: e.url,
+          title: e.title || e.url,
+          ts: e.ts || Date.now()
+        });
+      }
+    });
+    saveHistoryToDisk(history);
+    broadcastToWindows('history:updated', { imported: true });
+    return { ok: true };
+  });
+
+  ipcMain.handle('history:remove', (_e, ts) => {
+    const history = getHistory();
+    const idx = history.findIndex(h => h.ts === ts);
+    if (idx >= 0) {
+      history.splice(idx, 1);
+      saveHistoryToDisk(history);
+      broadcastToWindows('history:updated', { removed: ts });
+    }
+    return { ok: true };
+  });
+
+  ipcMain.handle('history:clear', () => {
+    historyCache = [];
+    saveHistoryToDisk(historyCache);
+    broadcastToWindows('history:updated', { cleared: true });
     return { ok: true };
   });
 
@@ -807,6 +928,14 @@ app.whenReady().then(() => {
   });
 
   ipcMain.handle('update:getCurrentVersion', () => app.getVersion());
+});
+
+app.on('before-quit', () => {
+  if (historySaveTimer) {
+    clearTimeout(historySaveTimer);
+    historySaveTimer = null;
+  }
+  if (historyCache) saveHistoryToDisk(historyCache);
 });
 
 app.on('window-all-closed', () => {
