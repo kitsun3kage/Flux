@@ -1,12 +1,26 @@
 // ==================================================
-// FLUX – renderer.js v0.1.1 (auto-update + default browser)
+// FLUX – renderer.js v0.1.2
+// Auto-update + default browser + cross-platform + optimizations
 // ==================================================
 
+// ===== Platform detection =====
+const isMac = /Mac|iPhone|iPad|iPod/.test(navigator.platform) ||
+              /Mac OS X/.test(navigator.userAgent);
+
+// ===== Debug mode (?debug=1) =====
+const DEBUG = new URLSearchParams(location.search).get('debug') === '1';
+function log(...args) { if (DEBUG) console.log('[Flux]', ...args); }
+
+// ===== Stan aplikacji =====
 let tabs = [];
 let activeTabId = null;
 let nextId = 1;
 
-// ===== Palety kolorów =====
+// ===== Cache faviconów (by domain) =====
+const faviconCache = new Map();
+const FAVICON_CACHE_MAX = 200;
+
+// ===== Palety =====
 const PALETTES = {
   neutral: { name: 'Neutral',   desc: 'Domyślny',  grad: ['#8AB4F8', '#669DF6', '#1A73E8'], rgb: [138, 180, 248] },
   default: { name: 'Flux Blue', desc: 'Klasyczny', grad: ['#4A9EFF', '#1E6FDC', '#0A2A6B'], rgb: [46, 125, 224] },
@@ -62,7 +76,7 @@ async function initSettings() {
   if (window.flux?.settings) {
     try {
       const all = await window.flux.settings.getAll();
-      console.log('[Flux] Wczytane ustawienia:', all);
+      log('Wczytane ustawienia:', all);
       settingsCache = { ...settingsCache, ...all };
     } catch (err) {
       console.error('[Flux] Błąd ładowania ustawień:', err);
@@ -70,21 +84,17 @@ async function initSettings() {
   }
 }
 
-function getSetting(key) {
-  return settingsCache[key];
-}
+function getSetting(key) { return settingsCache[key]; }
 
 async function setSetting(key, value) {
   settingsCache[key] = value;
   if (window.flux?.settings) {
-    try {
-      await window.flux.settings.set(key, value);
-    } catch (err) {
-      console.error('[Flux] Błąd zapisu ustawienia:', err);
-    }
+    try { await window.flux.settings.set(key, value); }
+    catch (err) { console.error('[Flux] Błąd zapisu:', err); }
   }
 }
 
+// ===== Silnik wyszukiwarki =====
 const SEARCH_ENGINES = {
   duckduckgo: 'https://duckduckgo.com/?q=',
   google: 'https://www.google.com/search?q=',
@@ -94,6 +104,7 @@ const SEARCH_ENGINES = {
 const isPrivate = new URLSearchParams(location.search).get('private') === '1';
 if (isPrivate) document.body.setAttribute('data-private', 'true');
 
+// ===== Helpery =====
 function escapeHtml(str) {
   const div = document.createElement('div');
   div.textContent = str || '';
@@ -104,8 +115,32 @@ function getFaviconUrl(pageUrl) {
   try {
     if (pageUrl.startsWith('flux://')) return null;
     const u = new URL(pageUrl);
-    return `https://www.google.com/s2/favicons?domain=${u.hostname}&sz=32`;
+
+    // Cache by hostname
+    const hostname = u.hostname;
+    if (faviconCache.has(hostname)) return faviconCache.get(hostname);
+
+    const url = `https://www.google.com/s2/favicons?domain=${hostname}&sz=32`;
+
+    // Limit cache size
+    if (faviconCache.size >= FAVICON_CACHE_MAX) {
+      const firstKey = faviconCache.keys().next().value;
+      faviconCache.delete(firstKey);
+    }
+    faviconCache.set(hostname, url);
+
+    return url;
   } catch { return null; }
+}
+
+function webviewCall(tab, method, ...args) {
+  if (!tab || !tab.webview) return undefined;
+  try {
+    if (typeof tab.webview[method] === 'function') {
+      return tab.webview[method](...args);
+    }
+  } catch (e) {}
+  return undefined;
 }
 
 // ===== Historia =====
@@ -121,17 +156,27 @@ function saveHistory(history) {
   localStorage.setItem('flux-history', JSON.stringify(history));
 }
 
+let historySaveTimer = null;
+function scheduleHistorySave() {
+  if (historySaveTimer) return;
+  historySaveTimer = setTimeout(() => {
+    historySaveTimer = null;
+    saveHistory(historyCache);
+  }, 500);
+}
+
+let historyCache = null;
 function addToHistory(url, title) {
   if (isPrivate) return;
   if (!getSetting('saveHistory')) return;
   if (!url || url === 'about:blank' || url.startsWith('file://')) return;
   if (url.startsWith('flux://')) return;
 
-  const history = loadHistory();
-  if (history.length > 0 && history[history.length - 1].url === url) return;
+  if (!historyCache) historyCache = loadHistory();
+  if (historyCache.length > 0 && historyCache[historyCache.length - 1].url === url) return;
 
-  history.push({ url, title: title || url, ts: Date.now() });
-  saveHistory(history);
+  historyCache.push({ url, title: title || url, ts: Date.now() });
+  scheduleHistorySave();
 }
 
 // ===== Zakładki (bookmarks) =====
@@ -145,12 +190,16 @@ function saveBookmarks(bookmarks) {
 }
 
 function isBookmarked(url) {
-  return loadBookmarks().some(b => b.url === url);
+  if (!url) return false;
+  const bookmarks = loadBookmarks();
+  for (let i = 0; i < bookmarks.length; i++) {
+    if (bookmarks[i].url === url) return true;
+  }
+  return false;
 }
 
 function toggleBookmark(url, title) {
-  if (!url) return;
-  if (url.startsWith('flux://')) return;
+  if (!url || url.startsWith('flux://')) return;
   const bookmarks = loadBookmarks();
   const idx = bookmarks.findIndex(b => b.url === url);
   if (idx >= 0) bookmarks.splice(idx, 1);
@@ -162,14 +211,7 @@ function toggleBookmark(url, title) {
 function updateBookmarkStar() {
   const tab = tabs.find(t => t.id === activeTabId);
   if (!tab) return;
-
-  let url = tab.url;
-  try {
-    if (typeof tab.webview.getURL === 'function') {
-      url = tab.webview.getURL() || tab.url;
-    }
-  } catch (e) {}
-
+  const url = webviewCall(tab, 'getURL') || tab.url;
   btnBookmark.classList.toggle('active', isBookmarked(url));
 }
 
@@ -185,8 +227,7 @@ function applyTheme(theme) {
 
   let resolved = theme;
   if (theme === 'system') {
-    const prefersLight = window.matchMedia('(prefers-color-scheme: light)').matches;
-    resolved = prefersLight ? 'light' : 'dark';
+    resolved = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
     if (window.flux && window.flux.theme) window.flux.theme.set('system');
   } else {
     if (window.flux && window.flux.theme) window.flux.theme.set(theme);
@@ -243,12 +284,12 @@ function updateAllLogos(paletteId) {
 }
 
 // ==================================================
-// NASŁUCH na zmiany z main process
+// NASŁUCH na zmiany
 // ==================================================
 function setupSyncListeners() {
   if (window.flux?.settings) {
     window.flux.settings.onChange(({ key, value }) => {
-      console.log('[Flux] Zmiana ustawienia:', key, '=', value);
+      log('Zmiana ustawienia:', key, '=', value);
       settingsCache[key] = value;
 
       if (key === 'theme') {
@@ -260,9 +301,7 @@ function setupSyncListeners() {
   }
 
   window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => {
-    if (!isPrivate && getSetting('theme') === 'system') {
-      applyTheme('system');
-    }
+    if (!isPrivate && getSetting('theme') === 'system') applyTheme('system');
   });
 }
 
@@ -273,14 +312,10 @@ function setupOpenUrlListener() {
   if (!window.flux?.app?.onOpenUrl) return;
 
   window.flux.app.onOpenUrl((url) => {
-    console.log('[Flux] Otwieram URL z systemu:', url);
-
+    log('Otwieram URL z systemu:', url);
     const tab = tabs.find(t => t.id === activeTabId);
-    if (tab) {
-      tab.webview.loadURL(url);
-    } else {
-      createTab(url);
-    }
+    if (tab) tab.webview.loadURL(url);
+    else createTab(url);
   });
 }
 
@@ -290,30 +325,14 @@ function setupOpenUrlListener() {
 function setupUpdateListeners() {
   if (!window.flux?.update) return;
 
-  window.flux.update.onChecking(() => {
-    console.log('[Flux] Sprawdzam aktualizacje...');
-  });
-
   window.flux.update.onAvailable((info) => {
-    console.log('[Flux] Dostępna aktualizacja:', info.version);
+    log('Dostępna aktualizacja:', info.version);
     showUpdateBanner(info);
   });
 
-  window.flux.update.onNotAvailable((info) => {
-    console.log('[Flux] Brak aktualizacji');
-  });
-
-  window.flux.update.onProgress((progress) => {
-    updateDownloadProgress(progress);
-  });
-
-  window.flux.update.onDownloaded((info) => {
-    showInstallPrompt(info);
-  });
-
-  window.flux.update.onError((err) => {
-    console.error('[Flux] Błąd aktualizacji:', err);
-  });
+  window.flux.update.onProgress((progress) => updateDownloadProgress(progress));
+  window.flux.update.onDownloaded((info) => showInstallPrompt(info));
+  window.flux.update.onError((err) => console.error('[Flux] Błąd aktualizacji:', err));
 }
 
 function showUpdateBanner(info) {
@@ -340,18 +359,11 @@ function showUpdateBanner(info) {
   `;
 
   banner.style.cssText = `
-    position: fixed;
-    top: 50px;
-    left: 50%;
-    transform: translateX(-50%);
+    position: fixed; top: 50px; left: 50%; transform: translateX(-50%);
     background: linear-gradient(135deg, #A78BFA, #7C3AED);
-    color: white;
-    padding: 12px 16px;
-    border-radius: 12px;
-    box-shadow: 0 12px 40px rgba(0,0,0,0.4);
-    z-index: 10000;
-    min-width: 480px;
-    max-width: 90vw;
+    color: white; padding: 12px 16px; border-radius: 12px;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.4); z-index: 10000;
+    min-width: 480px; max-width: 90vw;
     font-family: -apple-system, system-ui, sans-serif;
     animation: updateSlideIn 0.3s ease;
   `;
@@ -369,8 +381,7 @@ function showUpdateBanner(info) {
       #update-banner .update-content { display: flex; align-items: center; gap: 12px; }
       #update-banner .update-icon {
         display: flex; align-items: center; justify-content: center;
-        width: 32px; height: 32px;
-        background: rgba(255,255,255,0.2);
+        width: 32px; height: 32px; background: rgba(255,255,255,0.2);
         border-radius: 50%; flex-shrink: 0;
       }
       #update-banner .update-text { flex: 1; display: flex; flex-direction: column; gap: 2px; }
@@ -378,15 +389,15 @@ function showUpdateBanner(info) {
       #update-banner .update-text span { font-size: 11.5px; opacity: 0.9; }
       #update-banner .update-btn {
         padding: 8px 16px; background: white; color: #7C3AED;
-        border: none; border-radius: 8px;
-        font-size: 12.5px; font-weight: 700; cursor: pointer;
-        font-family: inherit; transition: transform 0.15s ease;
+        border: none; border-radius: 8px; font-size: 12.5px;
+        font-weight: 700; cursor: pointer; font-family: inherit;
+        transition: transform 0.15s ease;
       }
       #update-banner .update-btn:hover { transform: scale(1.05); }
       #update-banner .update-close {
         background: rgba(255,255,255,0.15); border: none; color: white;
-        width: 28px; height: 28px; border-radius: 50%;
-        cursor: pointer; font-size: 18px; line-height: 1;
+        width: 28px; height: 28px; border-radius: 50%; cursor: pointer;
+        font-size: 18px; line-height: 1;
         display: flex; align-items: center; justify-content: center;
       }
       #update-banner .update-close:hover { background: rgba(255,255,255,0.25); }
@@ -399,15 +410,10 @@ function showUpdateBanner(info) {
     btn.textContent = 'Pobieram...';
     btn.disabled = true;
     btn.style.opacity = '0.7';
-
-    if (window.flux?.update) {
-      await window.flux.update.download();
-    }
+    if (window.flux?.update) await window.flux.update.download();
   });
 
-  document.getElementById('update-dismiss-btn').addEventListener('click', () => {
-    banner.remove();
-  });
+  document.getElementById('update-dismiss-btn').addEventListener('click', () => banner.remove());
 }
 
 function updateDownloadProgress(progress) {
@@ -423,12 +429,9 @@ function updateDownloadProgress(progress) {
     if (!bar) {
       bar = document.createElement('div');
       bar.className = 'update-progress-bar';
-      bar.style.cssText = `
-        position: absolute; bottom: 0; left: 0; height: 3px;
-        background: rgba(255,255,255,0.8);
-        border-radius: 0 0 12px 12px;
-        transition: width 0.3s ease;
-      `;
+      bar.style.cssText = `position: absolute; bottom: 0; left: 0; height: 3px;
+        background: rgba(255,255,255,0.8); border-radius: 0 0 12px 12px;
+        transition: width 0.3s ease;`;
       banner.style.position = 'fixed';
       banner.style.overflow = 'hidden';
       banner.appendChild(bar);
@@ -460,10 +463,7 @@ function showInstallPrompt(info) {
   document.getElementById('update-install-btn').addEventListener('click', () => {
     if (window.flux?.update) window.flux.update.install();
   });
-
-  document.getElementById('update-later-btn').addEventListener('click', () => {
-    banner.remove();
-  });
+  document.getElementById('update-later-btn').addEventListener('click', () => banner.remove());
 }
 
 // ==================================================
@@ -474,17 +474,14 @@ function normalizeUrl(input) {
   const homeUrl = getSetting('homeUrl') || 'flux://home';
   if (!value) return homeUrl;
 
-  if (/^flux:\/\/privacy\/?$/i.test(value) && !isPrivate) {
+  if (/^flux:\/\/privacy\/?$/i.test(value) && !isPrivate)
     return 'flux://private-blocked?page=privacy';
-  }
 
   if (isPrivate) {
-    if (/^flux:\/\/settings\/?$/i.test(value)) {
+    if (/^flux:\/\/settings\/?$/i.test(value))
       return 'flux://private-blocked?page=settings';
-    }
-    if (/^flux:\/\/history\/?$/i.test(value)) {
+    if (/^flux:\/\/history\/?$/i.test(value))
       return 'flux://private-blocked?page=history';
-    }
   }
 
   if (/^flux:\/\//i.test(value)) return value;
@@ -500,11 +497,9 @@ function normalizeUrl(input) {
 // ==================================================
 function updateTabFavicon(id, faviconUrl) {
   const tab = tabs.find(t => t.id === id);
-  if (!tab) return;
-  if (!faviconUrl) return;
+  if (!tab || !faviconUrl) return;
 
   let img = tab.tabEl.querySelector('img.favicon');
-
   if (img) {
     img.src = faviconUrl;
     img.style.display = '';
@@ -526,21 +521,12 @@ function tryFallbackFavicon(id) {
   const tab = tabs.find(t => t.id === id);
   if (!tab) return;
 
-  let currentUrl = tab.url;
-  try {
-    if (typeof tab.webview.getURL === 'function') {
-      currentUrl = tab.webview.getURL() || tab.url;
-    }
-  } catch (e) {}
-
+  const currentUrl = webviewCall(tab, 'getURL') || tab.url;
   if (!currentUrl || currentUrl.startsWith('flux://') || currentUrl.startsWith('file://')) return;
   if (currentUrl === 'about:blank') return;
 
-  try {
-    const u = new URL(currentUrl);
-    const faviconUrl = `https://www.google.com/s2/favicons?domain=${u.hostname}&sz=64`;
-    updateTabFavicon(id, faviconUrl);
-  } catch (e) {}
+  const faviconUrl = getFaviconUrl(currentUrl);
+  if (faviconUrl) updateTabFavicon(id, faviconUrl);
 }
 
 // ==================================================
@@ -550,13 +536,9 @@ function createTab(url) {
   const id = nextId++;
 
   let startUrl;
-  if (url) {
-    startUrl = url;
-  } else if (isPrivate && tabs.length === 0) {
-    startUrl = 'flux://privacy';
-  } else {
-    startUrl = getSetting('homeUrl') || 'flux://home';
-  }
+  if (url) startUrl = url;
+  else if (isPrivate && tabs.length === 0) startUrl = 'flux://privacy';
+  else startUrl = getSetting('homeUrl') || 'flux://home';
 
   const webview = document.createElement('webview');
   webview.setAttribute('src', startUrl);
@@ -584,6 +566,7 @@ function createTab(url) {
   const tab = { id, webview, tabEl, title: 'Nowa karta', url: startUrl };
   tabs.push(tab);
 
+  // Zdarzenia webview
   webview.addEventListener('did-navigate', (e) => {
     const url = e.url;
 
@@ -619,15 +602,12 @@ function createTab(url) {
 
   webview.addEventListener('page-title-updated', (e) => {
     updateTabTitle(id, e.title);
-    if (activeTabId === id) addToHistory(tab.webview.getURL(), e.title);
+    if (activeTabId === id) addToHistory(webviewCall(tab, 'getURL'), e.title);
   });
 
   webview.addEventListener('page-favicon-updated', (e) => {
-    if (e.favicons && e.favicons.length > 0) {
-      updateTabFavicon(id, e.favicons[0]);
-    } else {
-      tryFallbackFavicon(id);
-    }
+    if (e.favicons && e.favicons.length > 0) updateTabFavicon(id, e.favicons[0]);
+    else tryFallbackFavicon(id);
   });
 
   webview.addEventListener('did-start-loading', () => {
@@ -645,10 +625,8 @@ function createTab(url) {
 
   webview.addEventListener('new-window', (e) => {
     e.preventDefault();
-    if (e.url && (e.url.startsWith('http://') || e.url.startsWith('https://'))) {
-      if (window.flux?.shell) {
-        window.flux.shell.openExternal(e.url);
-      }
+    if (e.url && /^https?:\/\//.test(e.url)) {
+      if (window.flux?.shell) window.flux.shell.openExternal(e.url);
     }
   });
 
@@ -657,13 +635,8 @@ function createTab(url) {
 }
 
 function setLoadingState(isLoading) {
-  if (isLoading) {
-    reloadIcon.style.display = 'none';
-    stopIcon.style.display = 'block';
-  } else {
-    reloadIcon.style.display = 'block';
-    stopIcon.style.display = 'none';
-  }
+  reloadIcon.style.display = isLoading ? 'none' : 'block';
+  stopIcon.style.display = isLoading ? 'block' : 'none';
 }
 
 function activateTab(id) {
@@ -673,22 +646,8 @@ function activateTab(id) {
     t.webview.style.display = isActive ? 'flex' : 'none';
     t.tabEl.classList.toggle('active', isActive);
     if (isActive) {
-      let currentUrl = t.url;
-      try {
-        if (typeof t.webview.getURL === 'function') {
-          currentUrl = t.webview.getURL() || t.url;
-        }
-      } catch (e) {}
-      urlInput.value = currentUrl;
-
-      let loading = false;
-      try {
-        if (typeof t.webview.isLoading === 'function') {
-          loading = t.webview.isLoading();
-        }
-      } catch (e) {}
-      setLoadingState(loading);
-
+      urlInput.value = webviewCall(t, 'getURL') || t.url;
+      setLoadingState(webviewCall(t, 'isLoading') || false);
       updateNavButtons();
       updateBookmarkStar();
       updateZoomDisplay();
@@ -701,6 +660,8 @@ function closeTab(id) {
   const idx = tabs.findIndex(t => t.id === id);
   if (idx === -1) return;
   const [tab] = tabs.splice(idx, 1);
+
+  // Usuń z DOM
   tab.webview.remove();
   tab.tabEl.remove();
 
@@ -737,15 +698,8 @@ function updateTabTitle(id, title) {
 function updateNavButtons() {
   const tab = tabs.find(t => t.id === activeTabId);
   if (!tab) return;
-
-  let canBack = false, canForward = false;
-  try {
-    if (typeof tab.webview.canGoBack === 'function') canBack = tab.webview.canGoBack();
-    if (typeof tab.webview.canGoForward === 'function') canForward = tab.webview.canGoForward();
-  } catch (e) {}
-
-  btnBack.disabled = !canBack;
-  btnForward.disabled = !canForward;
+  btnBack.disabled = !webviewCall(tab, 'canGoBack');
+  btnForward.disabled = !webviewCall(tab, 'canGoForward');
 }
 
 // ===== Wskaźnik blokady =====
@@ -778,9 +732,12 @@ if (window.flux && window.flux.adblock) {
 
 urlShield.addEventListener('click', () => openShield());
 
-// ===== Autouzupełnianie =====
+// ==================================================
+// AUTOCOMPLETE (z debouncing)
+// ==================================================
 let autocompleteItems = [];
 let autocompleteIndex = -1;
+let autocompleteDebounceTimer = null;
 
 function showAutocomplete(query) {
   const value = query.trim().toLowerCase();
@@ -811,22 +768,23 @@ function showAutocomplete(query) {
     }
   });
 
-  bookmarks.forEach(b => {
-    if (seen.has(b.url)) return;
+  for (const b of bookmarks) {
+    if (seen.has(b.url)) continue;
     seen.add(b.url);
     if (b.url.toLowerCase().includes(value) || (b.title || '').toLowerCase().includes(value)) {
       suggestions.push({ ...b, type: 'Zakładka' });
     }
-  });
+  }
 
-  history.slice().reverse().forEach(h => {
-    if (seen.has(h.url)) return;
-    if (suggestions.length >= 8) return;
+  for (let i = history.length - 1; i >= 0; i--) {
+    const h = history[i];
+    if (seen.has(h.url)) continue;
+    if (suggestions.length >= 8) break;
     if (h.url.toLowerCase().includes(value) || (h.title || '').toLowerCase().includes(value)) {
       seen.add(h.url);
       suggestions.push({ ...h, type: 'Historia' });
     }
-  });
+  }
 
   if (suggestions.length === 0) {
     suggestions.push({ url: normalizeUrl(value), title: `Szukaj: ${value}`, type: 'Szukaj' });
@@ -840,7 +798,8 @@ function renderAutocomplete(items) {
   autocompleteIndex = -1;
   if (items.length === 0) { hideAutocomplete(); return; }
 
-  urlAutocomplete.innerHTML = '';
+  const fragment = document.createDocumentFragment();
+
   items.forEach((item, i) => {
     const el = document.createElement('div');
     el.className = 'autocomplete-item';
@@ -858,9 +817,11 @@ function renderAutocomplete(items) {
       <span class="autocomplete-type">${item.type}</span>
     `;
     el.addEventListener('mousedown', (e) => { e.preventDefault(); selectAutocomplete(i); });
-    urlAutocomplete.appendChild(el);
+    fragment.appendChild(el);
   });
 
+  urlAutocomplete.innerHTML = '';
+  urlAutocomplete.appendChild(fragment);
   urlAutocomplete.classList.add('visible');
 }
 
@@ -889,21 +850,19 @@ function updateAutocompleteSelection() {
 // ===== Nawigacja =====
 btnBack.addEventListener('click', () => {
   const tab = tabs.find(t => t.id === activeTabId);
-  if (tab?.webview.canGoBack && tab.webview.canGoBack()) tab.webview.goBack();
+  if (tab && webviewCall(tab, 'canGoBack')) webviewCall(tab, 'goBack');
 });
 
 btnForward.addEventListener('click', () => {
   const tab = tabs.find(t => t.id === activeTabId);
-  if (tab?.webview.canGoForward && tab.webview.canGoForward()) tab.webview.goForward();
+  if (tab && webviewCall(tab, 'canGoForward')) webviewCall(tab, 'goForward');
 });
 
 btnReload.addEventListener('click', () => {
   const tab = tabs.find(t => t.id === activeTabId);
   if (!tab) return;
-  let loading = false;
-  try { loading = tab.webview.isLoading(); } catch (e) {}
-  if (loading) tab.webview.stop();
-  else tab.webview.reload();
+  if (webviewCall(tab, 'isLoading')) webviewCall(tab, 'stop');
+  else webviewCall(tab, 'reload');
 });
 
 btnHome.addEventListener('click', () => {
@@ -916,13 +875,22 @@ btnNewTab.addEventListener('click', () => createTab());
 btnBookmark.addEventListener('click', () => {
   const tab = tabs.find(t => t.id === activeTabId);
   if (!tab) return;
-  let url = tab.url;
-  try { url = tab.webview.getURL() || tab.url; } catch (e) {}
+  const url = webviewCall(tab, 'getURL') || tab.url;
   if (url) toggleBookmark(url, tab.title);
 });
 
-urlInput.addEventListener('input', () => showAutocomplete(urlInput.value));
-urlInput.addEventListener('focus', () => { if (urlInput.value) showAutocomplete(urlInput.value); });
+urlInput.addEventListener('input', () => {
+  if (autocompleteDebounceTimer) clearTimeout(autocompleteDebounceTimer);
+  autocompleteDebounceTimer = setTimeout(() => {
+    autocompleteDebounceTimer = null;
+    showAutocomplete(urlInput.value);
+  }, 120);
+});
+
+urlInput.addEventListener('focus', () => {
+  if (urlInput.value) showAutocomplete(urlInput.value);
+});
+
 urlInput.addEventListener('blur', () => setTimeout(hideAutocomplete, 150));
 
 urlInput.addEventListener('keydown', (e) => {
@@ -1036,9 +1004,10 @@ document.getElementById('shield-adblock-toggle')?.addEventListener('change', asy
   }
 });
 
+// Polling stats tylko gdy panel otwarty (5s zamiast 2s)
 setInterval(() => {
   if (shieldEl.classList.contains('open')) updateShieldStats();
-}, 2000);
+}, 5000);
 
 // ===== Menu clicks =====
 menuEl.addEventListener('click', (e) => {
@@ -1069,13 +1038,12 @@ menuEl.addEventListener('click', (e) => {
 function handleZoom(action) {
   const tab = tabs.find(t => t.id === activeTabId);
   if (!tab) return;
-  let current = 0;
-  try { current = tab.webview.getZoomLevel ? tab.webview.getZoomLevel() : 0; } catch (e) {}
+  const current = webviewCall(tab, 'getZoomLevel') || 0;
   let newLevel = current;
   if (action === 'zoom-in')    newLevel = Math.min(current + 0.5, 5);
   if (action === 'zoom-out')   newLevel = Math.max(current - 0.5, -3);
   if (action === 'zoom-reset') newLevel = 0;
-  try { tab.webview.setZoomLevel(newLevel); } catch (e) {}
+  webviewCall(tab, 'setZoomLevel', newLevel);
   updateZoomDisplay();
 }
 
@@ -1083,13 +1051,7 @@ function updateZoomDisplay() {
   const tab = tabs.find(t => t.id === activeTabId);
   if (!tab) return;
 
-  let level = 0;
-  try {
-    if (typeof tab.webview.getZoomLevel === 'function') {
-      level = tab.webview.getZoomLevel();
-    }
-  } catch (e) {}
-
+  const level = webviewCall(tab, 'getZoomLevel') || 0;
   const percent = Math.round(Math.pow(1.2, level) * 100);
   const zoomValueEl = document.querySelector('.zoom-value');
   if (zoomValueEl) zoomValueEl.textContent = percent + '%';
@@ -1163,7 +1125,8 @@ function renderBookmarks() {
     bookmarksListEl.innerHTML = '<div class="list-empty">Brak zakładek. Kliknij ⭐ w pasku adresu, aby dodać.</div>';
     return;
   }
-  bookmarksListEl.innerHTML = '';
+
+  const fragment = document.createDocumentFragment();
   bookmarks.forEach(item => {
     const el = document.createElement('div');
     el.className = 'list-item';
@@ -1182,8 +1145,11 @@ function renderBookmarks() {
       if (tab) tab.webview.loadURL(item.url);
       closeModal('bookmarks-overlay');
     });
-    bookmarksListEl.appendChild(el);
+    fragment.appendChild(el);
   });
+
+  bookmarksListEl.innerHTML = '';
+  bookmarksListEl.appendChild(fragment);
 }
 
 // ===== Hasła (modal) =====
@@ -1195,7 +1161,8 @@ async function renderPasswords() {
     passwordsListEl.innerHTML = '<div class="list-empty">Brak zapisanych haseł</div>';
     return;
   }
-  passwordsListEl.innerHTML = '';
+
+  const fragment = document.createDocumentFragment();
   list.forEach(item => {
     const el = document.createElement('div');
     el.className = 'list-item';
@@ -1206,14 +1173,17 @@ async function renderPasswords() {
         <div class="list-item-url">${escapeHtml(item.username)}</div>
       </div>
     `;
-    passwordsListEl.appendChild(el);
+    fragment.appendChild(el);
   });
+
+  passwordsListEl.innerHTML = '';
+  passwordsListEl.appendChild(fragment);
 }
 
 // ===== Sync =====
 document.getElementById('export-data')?.addEventListener('click', async () => {
   const data = {
-    version: '0.1.1',
+    version: '0.1.2',
     exportedAt: new Date().toISOString(),
     settings: settingsCache,
     bookmarks: loadBookmarks(),
@@ -1241,9 +1211,7 @@ document.getElementById('import-data')?.addEventListener('click', () => {
       try {
         const data = JSON.parse(ev.target.result);
         if (data.settings) {
-          for (const [k, v] of Object.entries(data.settings)) {
-            await setSetting(k, v);
-          }
+          for (const [k, v] of Object.entries(data.settings)) await setSetting(k, v);
         }
         if (data.bookmarks) saveBookmarks(data.bookmarks);
         if (data.history)   saveHistory(data.history);
@@ -1257,53 +1225,163 @@ document.getElementById('import-data')?.addEventListener('click', () => {
   input.click();
 });
 
-// ===== Skróty klawiszowe =====
+// ==================================================
+// SKRÓTY KLAWISZOWE (cross-platform)
+// ==================================================
 document.addEventListener('keydown', (e) => {
-  const ctrl = e.ctrlKey || e.metaKey;
+  // Modyfikator: ⌘ na Mac, Ctrl na Windows/Linux
+  const mod = isMac ? e.metaKey : e.ctrlKey;
 
-  if (ctrl && e.shiftKey && (e.key === 'N' || e.key === 'n')) {
+  // Nowe okno prywatne: ⌘⇧N / Ctrl+Shift+N
+  if (mod && e.shiftKey && (e.key === 'N' || e.key === 'n')) {
     e.preventDefault();
     if (window.flux?.window) window.flux.window.newPrivate();
+    return;
   }
-  else if (ctrl && e.key === 't') { e.preventDefault(); createTab(); }
-  else if (ctrl && e.key === 'n') { e.preventDefault(); if (window.flux?.window) window.flux.window.newWindow(); }
-  else if (ctrl && e.key === 'w') { e.preventDefault(); if (activeTabId) closeTab(activeTabId); }
-  else if (ctrl && e.key === 'l') { e.preventDefault(); urlInput.focus(); urlInput.select(); }
-  else if (ctrl && e.key === 'd') { e.preventDefault(); btnBookmark.click(); }
-  else if (ctrl && e.key === 'y') { e.preventDefault(); handleMenuAction('history'); }
-  else if (ctrl && e.key === 'j') { e.preventDefault(); handleMenuAction('downloads'); }
-  else if (ctrl && e.key === ',') { e.preventDefault(); handleMenuAction('settings'); }
-  else if (e.key === 'F5') { e.preventDefault(); const t = tabs.find(t => t.id === activeTabId); if (t) t.webview.reload(); }
-  else if (ctrl && e.key === 'r') { e.preventDefault(); const t = tabs.find(t => t.id === activeTabId); if (t) t.webview.reload(); }
-  else if (ctrl && (e.key === '=' || e.key === '+')) { e.preventDefault(); handleZoom('zoom-in'); }
-  else if (ctrl && e.key === '-') { e.preventDefault(); handleZoom('zoom-out'); }
-  else if (ctrl && e.key === '0') { e.preventDefault(); handleZoom('zoom-reset'); }
-  else if (e.key === 'Escape') { closeMenu(); closeShield(); }
+
+  // Nowa karta: ⌘T / Ctrl+T
+  if (mod && (e.key === 't' || e.key === 'T')) {
+    e.preventDefault();
+    createTab();
+    return;
+  }
+
+  // Nowe okno: ⌘N / Ctrl+N
+  if (mod && (e.key === 'n' || e.key === 'N')) {
+    e.preventDefault();
+    if (window.flux?.window) window.flux.window.newWindow();
+    return;
+  }
+
+  // Zamknij kartę: ⌘W / Ctrl+W
+  if (mod && (e.key === 'w' || e.key === 'W')) {
+    e.preventDefault();
+    if (activeTabId) closeTab(activeTabId);
+    return;
+  }
+
+  // Zamknij aplikację: ⌘Q / Ctrl+Q
+  if (mod && (e.key === 'q' || e.key === 'Q')) {
+    e.preventDefault();
+    if (window.flux?.window) window.flux.window.close();
+    return;
+  }
+
+  // Focus URL: ⌘L / Ctrl+L
+  if (mod && (e.key === 'l' || e.key === 'L')) {
+    e.preventDefault();
+    urlInput.focus();
+    urlInput.select();
+    return;
+  }
+
+  // Zakładka: ⌘D / Ctrl+D
+  if (mod && (e.key === 'd' || e.key === 'D')) {
+    e.preventDefault();
+    btnBookmark.click();
+    return;
+  }
+
+  // Historia: ⌘Y (Mac) / Ctrl+H (Windows/Linux)
+  if (isMac && e.metaKey && (e.key === 'y' || e.key === 'Y')) {
+    e.preventDefault();
+    handleMenuAction('history');
+    return;
+  }
+  if (!isMac && e.ctrlKey && (e.key === 'h' || e.key === 'H')) {
+    e.preventDefault();
+    handleMenuAction('history');
+    return;
+  }
+
+  // Pobrane: ⌘J / Ctrl+J
+  if (mod && (e.key === 'j' || e.key === 'J')) {
+    e.preventDefault();
+    handleMenuAction('downloads');
+    return;
+  }
+
+  // Ustawienia: ⌘, / Ctrl+,
+  if (mod && e.key === ',') {
+    e.preventDefault();
+    handleMenuAction('settings');
+    return;
+  }
+
+  // Odśwież: F5 lub ⌘R / Ctrl+R
+  if (e.key === 'F5' || (mod && (e.key === 'r' || e.key === 'R'))) {
+    e.preventDefault();
+    const t = tabs.find(t => t.id === activeTabId);
+    if (t) t.webview.reload();
+    return;
+  }
+
+  // Zoom: ⌘+ / Ctrl+ / ⌘- / Ctrl- / ⌘0 / Ctrl+0
+  if (mod && (e.key === '=' || e.key === '+')) {
+    e.preventDefault();
+    handleZoom('zoom-in');
+    return;
+  }
+  if (mod && e.key === '-') {
+    e.preventDefault();
+    handleZoom('zoom-out');
+    return;
+  }
+  if (mod && e.key === '0') {
+    e.preventDefault();
+    handleZoom('zoom-reset');
+    return;
+  }
+
+  // Escape
+  if (e.key === 'Escape') {
+    closeMenu();
+    closeShield();
+  }
 });
+
+// ==================================================
+// WYKRYWANIE PLATFORMY – aktualizacja skrótów w menu
+// ==================================================
+function updateShortcutsForPlatform() {
+  if (isMac) return; // Mac ma domyślnie ⌘ w HTML
+
+  document.querySelectorAll('.menu-shortcut').forEach(el => {
+    let text = el.textContent;
+    text = text.replace(/⌘/g, 'Ctrl+');
+    text = text.replace(/⇧/g, 'Shift+');
+    text = text.replace(/⌥/g, 'Alt+');
+    text = text.replace(/⌃/g, 'Ctrl+');
+    // Uporządkuj
+    text = text.replace(/Ctrl\+Shift\+/g, 'Ctrl+Shift+');
+    el.textContent = text;
+  });
+}
 
 // ==================================================
 // START
 // ==================================================
 (async () => {
-  console.log('[Flux] Startuję renderer v0.1.1...');
-  console.log('[Flux] Tryb prywatny:', isPrivate);
+  log('Startuję renderer v0.1.2... (platform:', isMac ? 'macOS' : 'Windows/Linux', ')');
+  log('Tryb prywatny:', isPrivate);
 
+  // Aktualizuj skróty dla platformy
+  updateShortcutsForPlatform();
+
+  // Nasłuchy
   setupOpenUrlListener();
   setupUpdateListeners();
 
   await initSettings();
-  console.log('[Flux] Ustawienia po initSettings:', settingsCache);
 
   const savedTheme = settingsCache.theme || 'dark';
   applyTheme(savedTheme);
-  console.log('[Flux] Motyw:', isPrivate ? 'dark (wymuszony)' : savedTheme);
 
   const savedPalette = settingsCache.palette || 'neutral';
   applyPalette(savedPalette);
-  console.log('[Flux] Paleta:', savedPalette);
 
   setupSyncListeners();
   createTab();
 
-  console.log('[Flux] Gotowe');
+  log('Gotowe');
 })();
